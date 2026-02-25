@@ -7,3 +7,6 @@ python-pptx
 groq
 Pillow
 python-multipart
+moviepy
+numpy
+imageio-ffmpeg

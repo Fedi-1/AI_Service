@@ -1,3 +1,6 @@
 .env
 __pycache__/
 *.pyc
+fonts
+uploads
+test_video.py
