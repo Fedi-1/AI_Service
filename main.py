@@ -5,6 +5,8 @@ import os
 import re
 import traceback
 import base64
+import glob
+import requests
 
 import numpy as np
 import pypdf
@@ -22,6 +24,12 @@ load_dotenv()
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 if not GROQ_API_KEY:
     raise RuntimeError("GROQ_API_KEY is not set in the .env file")
+
+ELEVENLABS_API_KEY = os.getenv("ELEVENLABS_API_KEY", "")
+
+# ElevenLabs voice IDs
+ELEVENLABS_VOICE_FR = "nPczCjzI2devNBz1zQrb"   # Brian — calm professional male (French)
+ELEVENLABS_VOICE_EN = "21m00Tcm4TlvDq8ikWAM"   # Rachel — clear professional female (English)
 
 client = Groq(api_key=GROQ_API_KEY)
 MODEL  = "llama-3.3-70b-versatile"   # fast, free-tier Groq model
@@ -158,13 +166,13 @@ def clean_json_response(raw: str) -> str:
     return raw
 
 
-def groq_chat(prompt: str) -> str:
+def groq_chat(prompt: str, temperature: float = 0.4, max_tokens: int = 8192) -> str:
     """Single chat completion call to Groq."""
     response = client.chat.completions.create(
         model=MODEL,
         messages=[{"role": "user", "content": prompt}],
-        temperature=0.4,
-        max_tokens=8192,
+        temperature=temperature,
+        max_tokens=max_tokens,
     )
     return response.choices[0].message.content.strip()
 
@@ -175,6 +183,18 @@ def generate_course_title(text_preview: str) -> str:
         "and descriptive course title (maximum 8 words). "
         "Return only the title text, nothing else.\n\n"
         f"Document excerpt:\n{text_preview[:600]}"
+    )
+    return groq_chat(prompt)
+
+
+def generate_course_description(text_preview: str) -> str:
+    prompt = (
+        "Based on the following document excerpt, write a clear and informative course description "
+        "in 2 to 3 sentences that explains what topics this course covers, what the student will learn, "
+        "and why this knowledge is useful. "
+        "Detect the language of the text and write the description in that same language. "
+        "Return only the description text with no extra formatting or labels.\n\n"
+        f"Document excerpt:\n{text_preview[:800]}"
     )
     return groq_chat(prompt)
 
@@ -247,7 +267,8 @@ JSON structure:
   "flashcards": [
     {{
       "term": "Key term",
-      "definition": "Clear and concise definition."
+      "definition": "Clear and concise definition.",
+      "difficulty": "EASY | MEDIUM | HARD"
     }}
   ]
 }}
@@ -260,6 +281,7 @@ Rules:
 - "content" = professor-style teaching, every new concept explained with what/why/how/example; 5 paragraphs if the source has enough distinct concepts, otherwise 3 solid paragraphs — never pad with repeated ideas
 - If source language is French: write in pure French only — no Spanish, no mixing; technical terms with no French equivalent may stay in English
 - "estimatedReadTime" = estimated reading time in minutes for the content field (integer, minimum 1). Calculate it as: word count of the content field divided by 200, rounded up.
+- For each flashcard "difficulty": assign EASY for basic definitions any beginner understands after one read; MEDIUM for concepts requiring understanding of relationships or how a mechanism works in practice; HARD for concepts requiring deep understanding, involving multiple interrelated ideas, or likely to be confused with similar concepts. You MUST distribute difficulty realistically — do not assign MEDIUM to all flashcards. A typical lesson must have a mix of EASY, MEDIUM, and HARD flashcards proportional to content complexity.
 - Do NOT include literal newline characters inside JSON string values; use \\n for paragraph breaks
 - Return ONLY the JSON object, nothing else
 
@@ -270,245 +292,511 @@ Text content to teach from:
     cleaned = clean_json_response(raw)
     lesson  = json.loads(cleaned)
 
-    # ── Generate recap video ──────────────────────────────────────────────────
-    try:
-        flashcard_terms_v = [fc.get("term", "") for fc in (lesson.get("flashcards") or [])[:6]]
-        read_time_v       = lesson.get("estimatedReadTime") or math.ceil(
-            len((lesson.get("content") or "").split()) / 200
-        )
-        print(f"[generate_lesson] generating video script for lesson {lesson_number}...")
-
-        # Ask Groq to write the 4-slide video script
-        video_script = generate_video_script(
-            lesson_title   = lesson.get("title", f"Lesson {lesson_number}"),
-            lesson_content = lesson.get("content", ""),
-            lesson_summary = lesson.get("summary", ""),
-            flashcards     = lesson.get("flashcards") or [],
-        )
-
-        print(f"[generate_lesson] starting video render for lesson {lesson_number}...")
-        video_path = generate_recap_video(
-            lesson_number       = lesson_number,
-            lesson_title        = lesson.get("title", f"Lesson {lesson_number}"),
-            video_script        = video_script,
-            estimated_read_time = read_time_v,
-            flashcard_count     = len(lesson.get("flashcards") or []),
-            quiz_count          = len(lesson.get("quiz") or []),
-        )
-        print(f"[generate_lesson] video result: {video_path}")
-        lesson["recapVideoPath"] = video_path
-    except Exception as _ve:
-        print(f"[generate_lesson] video outer exception: {_ve}")
-        traceback.print_exc()
-        lesson["recapVideoPath"] = None
-
     return lesson
 
 
-# ─── Video Script Generation (Groq) ──────────────────────────────────────────────
+# ─── Recap Video — Script Generation ─────────────────────────────────────────
 def generate_video_script(
     lesson_title: str,
-    lesson_content: str,
-    lesson_summary: str,
-    flashcards: list,
+    real_world_hook: str,
+    key_takeaway: str,
+    practical_tip: str,
+    challenge_question: str,
+    language: str,
 ) -> dict:
     """
-    Ask Groq to write a 4-slide educational video script for the lesson.
-    Returns a dict with keys: hook, concept, steps, takeaway.
-    Falls back to sensible defaults if the LLM call fails.
+    Generates narration scripts for all 4 slides via a single Llama 3.3 call.
+    Returns dict with keys: slide1, slide2, slide3, slide4.
     """
-    terms = [fc.get("term", "") for fc in flashcards[:6]]
-    terms_str = ", ".join(terms) if terms else "see lesson content"
+    lang_name = "French" if language.lower().startswith("fr") else "English"
+    prompt = f"""You are writing a narration script for a short educational video about "{lesson_title}". The video has 4 slides. Write the narrator text for each slide in {lang_name}. The narrator speaks in a calm, clear, professor-like tone. Use simple academic language appropriate for university students.
 
-    prompt = f"""You are an expert instructional designer creating a short educational recap video for students.
+Slide 1 is about why this lesson matters in the real world. Base it on this hook: {real_world_hook}. Expand it into 3 sentences that explain the real-world importance naturally as if speaking to a student. Do not list facts — speak conversationally.
 
-Given the lesson below, write a concise 4-slide video script. Each slide is shown for 7 seconds.
-The goal is to genuinely TEACH — not just repeat the lesson title. Give students new understanding or a fresh angle.
+Slide 2 is about key concepts to remember. Base it on: {key_takeaway}. Write 3 to 4 sentences that introduce each key point conversationally, connecting them together naturally.
 
-Lesson title: {lesson_title}
-Key terms: {terms_str}
-Summary: {lesson_summary[:400]}
+Slide 3 is about practical application. Base it on: {practical_tip}. Write 3 sentences that guide the student through what to do next, using encouraging and actionable language.
 
-Return ONLY a valid JSON object with these exact keys:
-{{
-  "hook": "1–2 sentences: Why does this topic matter in the real world? Give a concrete real-life example or analogy.",
-  "concept": "2–3 sentences: Explain the single most important concept from this lesson in simple terms a beginner can understand.",
-  "steps": ["step 1 text (max 12 words)", "step 2 text (max 12 words)", "step 3 text (max 12 words)", "step 4 text (max 12 words)"],
-  "takeaway": "1 sentence: The most important thing to remember from this lesson."
-}}
+Slide 4 is a challenge question to prepare the student for the quiz. Use this question: {challenge_question}. Write 2 sentences: first tell the student to think carefully about the question, then state the question clearly.
 
-Rules:
-- Use plain language, no jargon without explanation
-- steps must be 3–4 items, each max 12 words
-- No markdown, no code blocks, ONLY the JSON object"""
+Return ONLY a valid JSON object with exactly 4 fields: slide1, slide2, slide3, slide4. Each field contains the narrator text as a plain string with no formatting."""
 
     try:
-        raw     = groq_chat(prompt)
+        raw     = groq_chat(prompt, temperature=0.6, max_tokens=600)
         cleaned = clean_json_response(raw)
-        script  = json.loads(cleaned)
-        # Validate required keys
-        for key in ("hook", "concept", "steps", "takeaway"):
-            if key not in script:
-                raise ValueError(f"Missing key: {key}")
-        if not isinstance(script["steps"], list) or len(script["steps"]) < 2:
-            raise ValueError("steps must be a list with at least 2 items")
-        return script
+        scripts = json.loads(cleaned)
+        for key in ("slide1", "slide2", "slide3", "slide4"):
+            if key not in scripts or not isinstance(scripts[key], str):
+                raise ValueError(f"Missing or invalid key: {key}")
+        return scripts
     except Exception as e:
         print(f"[generate_video_script] fallback due to: {e}")
-        return {
-            "hook":     f"Understanding {lesson_title} is essential for modern software development.",
-            "concept":  lesson_summary[:200] if lesson_summary else f"This lesson covers {lesson_title}.",
-            "steps":    [f"Study the key concept: {t}" for t in terms[:4]] or ["Review the lesson content"],
-            "takeaway": f"Master the concepts in {lesson_title} to build strong foundations.",
-        }
+        if language.lower().startswith("fr"):
+            return {
+                "slide1": f"{real_world_hook} Ce concept joue un rôle fondamental dans de nombreuses technologies modernes que vous utilisez au quotidien.",
+                "slide2": f"{key_takeaway} Ces points essentiels forment la base de votre compréhension de ce sujet.",
+                "slide3": f"{practical_tip} Appliquer ces étapes vous aidera à consolider votre apprentissage.",
+                "slide4": f"Prenez un moment pour réfléchir attentivement à cette question avant de passer au quiz. {challenge_question}",
+            }
+        else:
+            return {
+                "slide1": f"{real_world_hook} This concept plays a fundamental role in many modern technologies you use every day.",
+                "slide2": f"{key_takeaway} These essential points form the foundation of your understanding of this topic.",
+                "slide3": f"{practical_tip} Applying these steps will help you consolidate your learning.",
+                "slide4": f"Take a moment to think carefully about this question before moving on to the quiz. {challenge_question}",
+            }
+
+
+# ─── Recap Video — ElevenLabs Audio Generation ───────────────────────────────
+def generate_slide_audio(
+    slide_text: str,
+    language: str,
+    slide_index: int,
+) -> tuple[str, list[dict]]:
+    """
+    Calls ElevenLabs TTS with word-level timestamps.
+    Returns (mp3_path, word_timestamps_list).
+    Falls back to silent audio on any error.
+    """
+    os.makedirs(os.path.join("uploads", "recap-videos"), exist_ok=True)
+    mp3_path = os.path.abspath(
+        os.path.join("uploads", "recap-videos", f"temp_slide_{slide_index}.mp3")
+    )
+
+    def _silent_fallback() -> tuple[str, list]:
+        """Write 20 s of silent MP3 using a minimal WAV→MP3 trick via numpy."""
+        # Write a 20-second silent WAV, convert via moviepy/ffmpeg
+        try:
+            import wave, struct
+            silent_wav = mp3_path.replace(".mp3", "_silent.wav")
+            sample_rate = 22050
+            num_samples = sample_rate * 20
+            with wave.open(silent_wav, "w") as wf:
+                wf.setnchannels(1)
+                wf.setsampwidth(2)
+                wf.setframerate(sample_rate)
+                wf.writeframes(struct.pack("<" + "h" * num_samples, *([0] * num_samples)))
+            # Convert WAV → MP3 with ffmpeg (moviepy bundles it)
+            from moviepy import AudioFileClip as AFC
+            afc = AFC(silent_wav)
+            afc.write_audiofile(mp3_path, logger=None)
+            afc.close()
+            os.remove(silent_wav)
+        except Exception as ex:
+            print(f"[generate_slide_audio] silent fallback failed: {ex}")
+            # Last resort: write empty bytes so MoviePy can still open it
+            open(mp3_path, "wb").close()
+        return mp3_path, []
+
+    if not ELEVENLABS_API_KEY:
+        print(f"[generate_slide_audio] ELEVENLABS_API_KEY not set — using silent fallback")
+        return _silent_fallback()
+
+    voice_id = ELEVENLABS_VOICE_FR if language.lower().startswith("fr") else ELEVENLABS_VOICE_EN
+    url = f"https://api.elevenlabs.io/v1/text-to-speech/{voice_id}/with-timestamps"
+
+    headers = {
+        "xi-api-key": ELEVENLABS_API_KEY,
+        "Content-Type": "application/json",
+    }
+    body = {
+        "model_id": "eleven_multilingual_v2",
+        "text": slide_text,
+        "voice_settings": {
+            "stability": 0.75,
+            "similarity_boost": 0.85,
+            "style": 0.3,
+            "use_speaker_boost": True,
+        },
+    }
+
+    try:
+        resp = requests.post(url, headers=headers, json=body, timeout=60)
+        resp.raise_for_status()
+        data = resp.json()
+
+        # Decode audio
+        audio_bytes = base64.b64decode(data["audio_base64"])
+        with open(mp3_path, "wb") as f:
+            f.write(audio_bytes)
+
+        # Parse word-level timestamps from character alignment
+        alignment  = data.get("alignment", {})
+        chars      = alignment.get("characters", [])
+        starts     = alignment.get("character_start_times_seconds", [])
+        ends       = alignment.get("character_end_times_seconds", [])
+
+        word_timestamps: list[dict] = []
+        current_word = ""
+        word_start   = 0.0
+        word_end     = 0.0
+
+        for i, ch in enumerate(chars):
+            char_start = starts[i] if i < len(starts) else 0.0
+            char_end   = ends[i]   if i < len(ends)   else 0.0
+            if ch == " " or ch == "\n":
+                if current_word:
+                    word_timestamps.append({
+                        "word":  current_word,
+                        "start": word_start,
+                        "end":   word_end,
+                    })
+                    current_word = ""
+            else:
+                if not current_word:
+                    word_start = char_start
+                current_word += ch
+                word_end = char_end
+        if current_word:
+            word_timestamps.append({
+                "word":  current_word,
+                "start": word_start,
+                "end":   word_end,
+            })
+
+        print(f"[generate_slide_audio] slide {slide_index}: {len(word_timestamps)} words, "
+              f"audio {os.path.getsize(mp3_path):,} bytes")
+        return mp3_path, word_timestamps
+
+    except Exception as e:
+        print(f"[generate_slide_audio] ElevenLabs error for slide {slide_index}: {e}")
+        traceback.print_exc()
+        return _silent_fallback()
+
+
+# ─── Recap Video — Font Helper ────────────────────────────────────────────────
+def _recap_font(size: int, bold: bool = False) -> ImageFont.FreeTypeFont:
+    """Load a system font by size/weight, falling back to PIL default."""
+    fonts_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "fonts"))
+    win_dir   = r"C:\Windows\Fonts"
+    bold_names = ["Roboto-Bold.ttf", "arialbd.ttf", "calibrib.ttf", "segoeuib.ttf"]
+    reg_names  = ["Roboto-Regular.ttf", "arial.ttf", "calibri.ttf", "segoeui.ttf"]
+    candidates = bold_names if bold else reg_names
+    search_dirs = [fonts_dir, win_dir]
+    for d in search_dirs:
+        for name in candidates:
+            p = os.path.join(d, name)
+            if os.path.exists(p):
+                try:
+                    return ImageFont.truetype(p, size)
+                except Exception:
+                    continue
+    return ImageFont.load_default(size=size)
+
+
+# ─── Recap Video — Single Frame Renderer ────────────────────────────────────
+def render_slide_frame(
+    image_width: int,
+    image_height: int,
+    slide_title: str,
+    slide_title_color: tuple,
+    all_words: list[dict],
+    current_time: float,
+    slide_number: int,
+    total_slides: int = 4,
+) -> Image.Image:
+    """
+    Renders one video frame as a PIL Image with word-by-word text animation.
+    """
+    W, H = image_width, image_height
+    BG       = (10,  15,  35)
+    GRID     = (20,  25,  50)
+    BORDER   = (40,  45,  80)
+    INDIGO   = (99,  102, 241)
+    WHITE    = (255, 255, 255)
+    SPEAKING = (150, 160, 255)
+    GLOW     = (80,  90,  200)
+    DIM      = (60,  65,  90)
+    GRAY     = (120, 130, 150)
+    PROG_BG  = (30,  35,  60)
+
+    img = Image.new("RGB", (W, H), BG)
+    d   = ImageDraw.Draw(img)
+
+    # Grid
+    for gy in range(0, H, 40):
+        d.line([(0, gy), (W, gy)], fill=GRID, width=1)
+    for gx in range(0, W, 40):
+        d.line([(gx, 0), (gx, H)], fill=GRID, width=1)
+
+    # Inset border
+    d.rectangle([(20, 20), (W - 20, H - 20)], outline=BORDER, width=1)
+
+    # Separator below title
+    d.line([(40, 110), (W - 40, 110)], fill=INDIGO, width=1)
+
+    # Slide title (centred, y=45)
+    f_title = _recap_font(36, bold=True)
+    tw = d.textlength(slide_title, font=f_title)
+    d.text(((W - tw) / 2, 45), slide_title, font=f_title, fill=slide_title_color)
+
+    # Word-by-word animated body text
+    f_word   = _recap_font(26)
+    x, y     = 60, 140
+    line_h   = 48
+
+    for wdata in all_words:
+        word  = wdata["word"]
+        wst   = wdata["start"]
+        wend  = wdata["end"]
+        space = word + " "
+
+        # Measure word + space
+        bbox = d.textbbox((0, 0), space, font=f_word)
+        ww   = bbox[2] - bbox[0]
+
+        # Wrap if needed
+        if x + ww > W - 60 and x > 60:
+            x  = 60
+            y += line_h
+
+        # Determine colour state
+        if wst <= current_time <= wend:
+            # Currently speaking — glow effect + bright indigo
+            for dx, dy in ((-1, 0), (1, 0), (0, -1), (0, 1)):
+                d.text((x + dx, y + dy), word, font=f_word, fill=GLOW)
+            d.text((x, y), word, font=f_word, fill=SPEAKING)
+        elif wst <= current_time:
+            # Already spoken — full white
+            d.text((x, y), word, font=f_word, fill=WHITE)
+        else:
+            # Not yet spoken — very dim
+            d.text((x, y), word, font=f_word, fill=DIM)
+
+        # Advance x (use space width for spacing)
+        space_bbox = d.textbbox((0, 0), " ", font=f_word)
+        x += ww
+
+    # Progress bar (y 700–708)
+    d.rectangle([(0, H - 20), (W, H)], fill=PROG_BG)
+    fill_w = int(W * slide_number / total_slides)
+    if fill_w > 0:
+        d.rectangle([(0, H - 20), (fill_w, H)], fill=INDIGO)
+
+    # Slide number indicator (bottom-right)
+    f_small = _recap_font(16)
+    indicator = f"{slide_number} / {total_slides}"
+    iw = d.textlength(indicator, font=f_small)
+    d.text((W - iw - 30, H - 35), indicator, font=f_small, fill=GRAY)
+
+    return img
+
+
+# ─── Recap Video — Slide Clip Builder ────────────────────────────────────────
+def create_slide_clip(
+    slide_title: str,
+    slide_title_color: tuple,
+    slide_script: str,
+    slide_audio_path: str,
+    word_timestamps: list[dict],
+    slide_number: int,
+):
+    """
+    Builds a MoviePy VideoClip for one slide with word-by-word text animation
+    synchronised to the audio.
+    """
+    from moviepy import VideoClip, AudioFileClip
+
+    audio = AudioFileClip(slide_audio_path)
+    duration = audio.duration
+
+    def make_frame(t):
+        frame_img = render_slide_frame(
+            image_width=1280,
+            image_height=720,
+            slide_title=slide_title,
+            slide_title_color=slide_title_color,
+            all_words=word_timestamps,
+            current_time=t,
+            slide_number=slide_number,
+            total_slides=4,
+        )
+        return np.array(frame_img)
+
+    clip = VideoClip(make_frame, duration=duration)
+    clip = clip.with_fps(24)
+    clip = clip.with_audio(audio)
+    return clip
 
 
 # ─── Recap Video Generation ────────────────────────────────────────────────────
 def generate_recap_video(
     lesson_number: int,
     lesson_title: str,
-    video_script: dict,
+    flashcard_terms: list[str],
+    lesson_summary: str,
     estimated_read_time: int,
-    flashcard_count: int = 0,
-    quiz_count: int = 0,
+    course_title: str,
+    language: str,
 ) -> str | None:
     """
-    Render a 28-second MP4 recap video (4 slides × 7 s) using Pillow + MoviePy.
-    Slide content comes from the AI-generated video_script dict.
+    Render a narrated MP4 recap video (4 slides with ElevenLabs TTS + word-by-word
+    text animation). Returns the absolute path to the saved file, or None on failure.
     """
     print(f"[generate_recap_video] called for lesson {lesson_number}: '{lesson_title}'")
     try:
-        from moviepy import ImageClip, concatenate_videoclips
+        from moviepy import concatenate_videoclips
 
-        W, H      = 1280, 720
-        SLIDE_DUR = 7.0
-        BG        = (15,  20,  40)
-        INDIGO    = (99,  102, 241)
-        WHITE     = (248, 250, 252)
-        GOLD      = (245, 158, 11)
-        GRAY      = (148, 163, 184)
-        GREEN     = (52,  211, 153)
+        is_fr = (language or "").lower().startswith("fr")
 
-        _WIN = r"C:\Windows\Fonts"
-        def _f(size: int, bold: bool = False) -> ImageFont.FreeTypeFont:
-            names = (["arialbd.ttf","calibrib.ttf","segoeuib.ttf"] if bold
-                     else ["arial.ttf","calibri.ttf","segoeui.ttf"])
-            for n in names:
-                p = os.path.join(_WIN, n)
-                if os.path.exists(p):
-                    try:
-                        return ImageFont.truetype(p, size)
-                    except Exception:
-                        continue
-            return ImageFont.load_default(size=size)
+        # ── Content generation (Groq) ──────────────────────────────────────────
+        try:
+            hook_prompt = (
+                f"Donne 2 à 3 phrases expliquant des applications du monde réel où \"{lesson_title}\" est utilisé. "
+                f"Pour chaque application mentionne une app ou technologie bien connue et explique comment ce concept s'y applique. "
+                f"Maximum 50 mots au total. Réponds en français."
+                if is_fr else
+                f"Give 2 to 3 sentences explaining real-world applications where \"{lesson_title}\" is used. "
+                f"For each application mention a specific well-known app or technology and explain how this concept applies to it. "
+                f"Total maximum 50 words. Respond in English."
+            )
+            real_world_hook = groq_chat(hook_prompt, temperature=0.7, max_tokens=200).strip()
+        except Exception:
+            real_world_hook = (
+                "Ce concept est utilisé dans de nombreuses applications modernes comme les bases de données et les frameworks web."
+                if is_fr else
+                "This concept is used in modern applications like databases and web frameworks."
+            )
 
-        def wrap_draw(draw, text, font, color, x, y, max_w, spacing=10, centre=False):
-            words, lines, cur = text.split(), [], ""
-            for w in words:
-                test = (cur + " " + w).strip()
-                if draw.textlength(test, font=font) <= max_w:
-                    cur = test
-                else:
-                    if cur: lines.append(cur)
-                    cur = w
-            if cur: lines.append(cur)
-            _, _, _, lh = draw.textbbox((0,0), "Ag", font=font)
-            for line in lines:
-                lx = x + (max_w - draw.textlength(line, font=font)) / 2 if centre else x
-                draw.text((lx, y), line, font=font, fill=color)
-                y += lh + spacing
-            return y
+        try:
+            takeaway_prompt = (
+                f"Liste exactement 3 points clés qu'un étudiant doit retenir d'une leçon sur \"{lesson_title}\". "
+                f"Format : 3 courtes affirmations commençant chacune par un tiret. Maximum 12 mots par point. Réponds en français."
+                if is_fr else
+                f"List exactly 3 key points a student must remember from a lesson about \"{lesson_title}\". "
+                f"Format as 3 short statements each starting with a dash character. Each point maximum 12 words. Respond in English."
+            )
+            key_takeaway = groq_chat(takeaway_prompt, temperature=0.7, max_tokens=200).strip()
+        except Exception:
+            key_takeaway = (
+                "- Maîtrisez les concepts fondamentaux avant d'avancer.\n- Pratiquez régulièrement avec des exemples concrets.\n- Reliez ce concept aux notions déjà apprises."
+                if is_fr else
+                "- Master the fundamentals before moving forward.\n- Practice regularly with concrete examples.\n- Connect this concept to what you already know."
+            )
 
-        def divider(draw, y, color=INDIGO):
-            draw.line([(80, y), (W-80, y)], fill=color, width=2)
+        try:
+            tip_prompt = (
+                f"Donne exactement 3 étapes pratiques qu'un étudiant peut suivre pour pratiquer et appliquer les concepts "
+                f"d'une leçon sur \"{lesson_title}\". Format : 3 étapes numérotées courtes. Maximum 15 mots par étape. Réponds en français."
+                if is_fr else
+                f"Give exactly 3 practical steps a student can follow to practice and apply the concepts from a lesson "
+                f"about \"{lesson_title}\". Format as 3 short numbered steps. Each step maximum 15 words. Respond in English."
+            )
+            practical_tip = groq_chat(tip_prompt, temperature=0.7, max_tokens=200).strip()
+        except Exception:
+            practical_tip = (
+                "1. Lisez le résumé et identifiez les concepts clés.\n2. Créez un exemple simple.\n3. Expliquez le concept à voix haute."
+                if is_fr else
+                "1. Read the summary and identify the key concepts.\n2. Build a simple example.\n3. Explain the concept out loud."
+            )
 
-        def new_slide():
-            img = Image.new("RGB", (W, H), BG)
-            return img, ImageDraw.Draw(img)
+        try:
+            challenge_prompt = (
+                f"Formule une question de réflexion ouverte sur \"{lesson_title}\" pour préparer un étudiant à un quiz. "
+                f"La question doit tester la compréhension profonde, pas la mémorisation. Maximum 25 mots. Réponds en français."
+                if is_fr else
+                f"Write one open-ended thinking question about \"{lesson_title}\" to prepare a student for a quiz. "
+                f"The question should test deep understanding, not memorisation. Maximum 25 words. Respond in English."
+            )
+            challenge_question = groq_chat(challenge_prompt, temperature=0.7, max_tokens=100).strip()
+        except Exception:
+            challenge_question = (
+                f"Comment appliqueriez-vous les concepts de \"{lesson_title}\" pour résoudre un problème concret ?"
+                if is_fr else
+                f"How would you apply the concepts of \"{lesson_title}\" to solve a real-world problem?"
+            )
 
-        def brand(draw):
-            f = _f(20)
-            t = "LearnAI Platform"
-            draw.text(((W - draw.textlength(t, font=f)) / 2, H-50), t, font=f, fill=GRAY)
+        # ── Narration scripts (Groq) ───────────────────────────────────────────
+        scripts = generate_video_script(
+            lesson_title=lesson_title,
+            real_world_hook=real_world_hook,
+            key_takeaway=key_takeaway,
+            practical_tip=practical_tip,
+            challenge_question=challenge_question,
+            language=language,
+        )
 
-        # ── Slide 1 — WHY IT MATTERS (hook) ──────────────────────────────────────
-        img1, d1 = new_slide()
-        # Top label
-        lbl = f"LESSON {lesson_number}  ·  WHY IT MATTERS"
-        d1.text(((W - d1.textlength(lbl, font=_f(22,True)))/2, 50), lbl, font=_f(22,True), fill=INDIGO)
-        divider(d1, 92)
-        # Lesson title
-        wrap_draw(d1, lesson_title, _f(46,True), WHITE, 80, 110, W-160, spacing=8, centre=True)
-        divider(d1, 240, color=GRAY)
-        # Hook text
-        wrap_draw(d1, video_script.get("hook",""), _f(30), GOLD, 80, 265, W-160, spacing=12, centre=True)
-        brand(d1)
+        # ── Slide configurations ───────────────────────────────────────────────
+        GOLD   = (245, 158,  11)
+        INDIGO = ( 99, 102, 241)
 
-        # ── Slide 2 — CORE CONCEPT ────────────────────────────────────────────────
-        img2, d2 = new_slide()
-        lbl2 = "CORE CONCEPT"
-        d2.text(((W - d2.textlength(lbl2, font=_f(24,True)))/2, 50), lbl2, font=_f(24,True), fill=INDIGO)
-        divider(d2, 94)
-        # Big concept icon area
-        d2.ellipse([(W//2-45, 115), (W//2+45, 205)], fill=INDIGO)
-        star = "💡"  # will render as box with PIL, use text fallback
-        d2.text((W//2-10, 128), "?", font=_f(50,True), fill=WHITE)
-        # Concept explanation
-        wrap_draw(d2, video_script.get("concept",""), _f(32), WHITE, 80, 225, W-160, spacing=14, centre=True)
-        brand(d2)
+        slide_configs = [
+            {
+                "title":       "Pourquoi apprendre ceci ?" if is_fr else "Why does this matter?",
+                "title_color": GOLD,
+                "script":      scripts["slide1"],
+            },
+            {
+                "title":       "À retenir" if is_fr else "Key Takeaway",
+                "title_color": INDIGO,
+                "script":      scripts["slide2"],
+            },
+            {
+                "title":       "Dans la pratique" if is_fr else "In Practice",
+                "title_color": GOLD,
+                "script":      scripts["slide3"],
+            },
+            {
+                "title":       "Défi avant le quiz" if is_fr else "Challenge before the quiz",
+                "title_color": INDIGO,
+                "script":      scripts["slide4"],
+            },
+        ]
 
-        # ── Slide 3 — HOW IT WORKS (steps) ───────────────────────────────────────
-        img3, d3 = new_slide()
-        lbl3 = "HOW IT WORKS"
-        d3.text(((W - d3.textlength(lbl3, font=_f(24,True)))/2, 50), lbl3, font=_f(24,True), fill=GOLD)
-        divider(d3, 94, color=GOLD)
-        steps = video_script.get("steps", [])[:4]
-        y3 = 120
-        for i, step in enumerate(steps):
-            # Number circle
-            d3.ellipse([(80, y3), (120, y3+40)], fill=INDIGO)
-            d3.text((92, y3+4), str(i+1), font=_f(22,True), fill=WHITE)
-            # Step text
-            y3 = wrap_draw(d3, step, _f(30), WHITE, 140, y3+4, W-200, spacing=6)
-            y3 += 18
-        brand(d3)
+        # ── Generate audio + build clips ───────────────────────────────────────
+        clips = []
+        for i, cfg in enumerate(slide_configs):
+            slide_num = i + 1
+            print(f"[generate_recap_video] generating audio for slide {slide_num}...")
+            audio_path, word_ts = generate_slide_audio(
+                slide_text=cfg["script"],
+                language=language,
+                slide_index=slide_num,
+            )
+            print(f"[generate_recap_video] building clip for slide {slide_num}...")
+            clip = create_slide_clip(
+                slide_title=cfg["title"],
+                slide_title_color=cfg["title_color"],
+                slide_script=cfg["script"],
+                slide_audio_path=audio_path,
+                word_timestamps=word_ts,
+                slide_number=slide_num,
+            )
+            clips.append(clip)
 
-        # ── Slide 4 — KEY TAKEAWAY ────────────────────────────────────────────────
-        img4, d4 = new_slide()
-        lbl4 = "KEY TAKEAWAY"
-        d4.text(((W - d4.textlength(lbl4, font=_f(24,True)))/2, 50), lbl4, font=_f(24,True), fill=GREEN)
-        divider(d4, 94, color=GREEN)
-        # Large takeaway quote
-        wrap_draw(d4, f'"{video_script.get("takeaway","")}"', _f(36,True), WHITE,
-                  80, 160, W-160, spacing=16, centre=True)
-        divider(d4, 480, color=GRAY)
-        # Stats row
-        real_fc = flashcard_count or 0
-        real_qc = quiz_count or 5
-        stats = [(str(real_fc),"Flashcards"), (str(real_qc),"Quiz Questions"),
-                 (f"{estimated_read_time} min","Read Time")]
-        bw = (W-160) // 3
-        for i,(val,lbl) in enumerate(stats):
-            cx = 80 + bw*i + bw//2
-            d4.text((cx - d4.textlength(val,font=_f(42,True))//2, 500),
-                    val, font=_f(42,True), fill=INDIGO)
-            d4.text((cx - d4.textlength(lbl,font=_f(22))//2, 555),
-                    lbl, font=_f(22), fill=GRAY)
-        brand(d4)
+        # ── Concatenate & export ───────────────────────────────────────────────
+        final = concatenate_videoclips(clips, method="compose", padding=-0.5)
 
-        # ── Assemble ──────────────────────────────────────────────────────────────
-        def to_clip(img): return ImageClip(np.array(img), duration=SLIDE_DUR)
-        final = concatenate_videoclips([to_clip(img1), to_clip(img2),
-                                        to_clip(img3), to_clip(img4)], method="compose")
-
-        safe = re.sub(r"[^\w]", "_", lesson_title.encode("ascii","ignore").decode())[:30]
-        out  = os.path.abspath(os.path.join("uploads","recap-videos",
-                                            f"lesson_{lesson_number}_{safe}.mp4"))
+        safe = re.sub(r"[^\w]", "_", lesson_title.encode("ascii", "ignore").decode())[:30]
+        os.makedirs(os.path.join("uploads", "recap-videos"), exist_ok=True)
+        out = os.path.abspath(
+            os.path.join("uploads", "recap-videos", f"lesson_{lesson_number}_{safe}.mp4")
+        )
         print(f"[generate_recap_video] writing → {out}")
-        final.write_videofile(out, codec="libx264", audio=False, fps=24,
-                              preset="ultrafast", logger=None)
+        final.write_videofile(
+            out,
+            codec="libx264",
+            audio_codec="aac",
+            fps=24,
+            preset="ultrafast",
+            threads=4,
+            logger=None,
+        )
         final.close()
-        print(f"[generate_recap_video] done  {os.path.getsize(out):,} bytes")
+        for clip in clips:
+            try:
+                clip.close()
+            except Exception:
+                pass
+
+        # Clean up temp audio files
+        for tmp in glob.glob(os.path.join("uploads", "recap-videos", "temp_slide_*.mp3")):
+            try:
+                os.remove(tmp)
+            except Exception:
+                pass
+
+        print(f"[generate_recap_video] done — {os.path.getsize(out):,} bytes")
         return out
 
     except Exception as exc:
@@ -516,8 +804,6 @@ def generate_recap_video(
         traceback.print_exc()
         return None
 
-
-# ─── Recap Video Generation ───────────────────────────────────────────────────
 
 
 # ─── On-demand Quiz Generation ──────────────────────────────────────────────────
@@ -581,6 +867,17 @@ class GenerateQuizRequest(BaseModel):
 class GenerateExamRequest(BaseModel):
     lessonContents: list[str]
     courseTitle: str
+
+
+class GenerateLessonRecapRequest(BaseModel):
+    lessonId: int
+    lessonNumber: int
+    lessonTitle: str
+    flashcardTerms: list[str]
+    lessonSummary: str
+    estimatedReadTime: int
+    courseTitle: str
+    language: str  # "fr" or "en"
 
 
 # ─── On-demand Exam Generation ──────────────────────────────────────────────────
@@ -764,6 +1061,36 @@ async def generate_exam(request: GenerateExamRequest):
     return questions
 
 
+@app.post("/api/generate-lesson-recap")
+async def generate_lesson_recap_endpoint(request: GenerateLessonRecapRequest):
+    """Generate (or return cached) a recap video for a single lesson."""
+    safe = re.sub(r"[^\w]", "_", request.lessonTitle.encode("ascii", "ignore").decode())[:30]
+    expected_path = os.path.abspath(
+        os.path.join("uploads", "recap-videos", f"lesson_{request.lessonNumber}_{safe}.mp4")
+    )
+    # Return cached file if it already exists
+    if os.path.exists(expected_path):
+        print(f"[generate-lesson-recap] cache hit: {expected_path}")
+        return {"recapVideoPath": expected_path}
+    # Generate
+    try:
+        path = generate_recap_video(
+            lesson_number      = request.lessonNumber,
+            lesson_title       = request.lessonTitle,
+            flashcard_terms    = request.flashcardTerms,
+            lesson_summary     = request.lessonSummary,
+            estimated_read_time= request.estimatedReadTime,
+            course_title       = request.courseTitle,
+            language           = request.language,
+        )
+        return {"recapVideoPath": path}
+    except HTTPException:
+        raise
+    except Exception as e:
+        traceback.print_exc()
+        raise HTTPException(status_code=502, detail=f"Video generation failed: {str(e)}")
+
+
 @app.post("/process-document")
 async def process_document(
     file: UploadFile = File(...),
@@ -817,6 +1144,12 @@ async def process_document(
         raise HTTPException(status_code=502, detail=f"Groq API error (title): {str(e)}")
     print(f"    Title: \"{course_title}\"")
 
+    # ── Course description ───────────────────────────────────────────────────────
+    try:
+        course_description = generate_course_description(text)
+    except Exception:
+        course_description = ""
+
     # ── Lessons ─────────────────────────────────────────────────────────────────
     lessons = []
     previous_titles: list[str] = []
@@ -838,10 +1171,11 @@ async def process_document(
         previous_titles.append(lesson.get("title", f"Lesson {idx}"))
 
     result = {
-        "courseTitle":  course_title,
-        "category":     category,
-        "totalLessons": len(lessons),
-        "lessons":      lessons,
+        "courseTitle":       course_title,
+        "courseDescription": course_description,
+        "category":          category,
+        "totalLessons":      len(lessons),
+        "lessons":           lessons,
     }
     print(f"Done. Course \"{course_title}\" — category: \"{category}\" — {len(lessons)} lesson(s).")
     return result
