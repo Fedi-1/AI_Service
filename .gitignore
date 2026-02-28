@@ -4,3 +4,8 @@ __pycache__/
 fonts
 uploads
 test_video.py
+.remotion/
+remotion-renderer/node_modules/
+remotion-renderer/dist/
+remotion-renderer/.remotion-bundle-cache/
+make_test_json.mjs

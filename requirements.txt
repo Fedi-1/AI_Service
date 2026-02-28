@@ -11,3 +11,4 @@ moviepy
 numpy
 imageio-ffmpeg
 requests
+mutagen

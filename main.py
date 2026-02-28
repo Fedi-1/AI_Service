@@ -464,159 +464,20 @@ def generate_slide_audio(
         return _silent_fallback()
 
 
-# ─── Recap Video — Font Helper ────────────────────────────────────────────────
-def _recap_font(size: int, bold: bool = False) -> ImageFont.FreeTypeFont:
-    """Load a system font by size/weight, falling back to PIL default."""
-    fonts_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "fonts"))
-    win_dir   = r"C:\Windows\Fonts"
-    bold_names = ["Roboto-Bold.ttf", "arialbd.ttf", "calibrib.ttf", "segoeuib.ttf"]
-    reg_names  = ["Roboto-Regular.ttf", "arial.ttf", "calibri.ttf", "segoeui.ttf"]
-    candidates = bold_names if bold else reg_names
-    search_dirs = [fonts_dir, win_dir]
-    for d in search_dirs:
-        for name in candidates:
-            p = os.path.join(d, name)
-            if os.path.exists(p):
-                try:
-                    return ImageFont.truetype(p, size)
-                except Exception:
-                    continue
-    return ImageFont.load_default(size=size)
-
-
-# ─── Recap Video — Single Frame Renderer ────────────────────────────────────
-def render_slide_frame(
-    image_width: int,
-    image_height: int,
-    slide_title: str,
-    slide_title_color: tuple,
-    all_words: list[dict],
-    current_time: float,
-    slide_number: int,
-    total_slides: int = 4,
-) -> Image.Image:
-    """
-    Renders one video frame as a PIL Image with word-by-word text animation.
-    """
-    W, H = image_width, image_height
-    BG       = (10,  15,  35)
-    GRID     = (20,  25,  50)
-    BORDER   = (40,  45,  80)
-    INDIGO   = (99,  102, 241)
-    WHITE    = (255, 255, 255)
-    SPEAKING = (150, 160, 255)
-    GLOW     = (80,  90,  200)
-    DIM      = (60,  65,  90)
-    GRAY     = (120, 130, 150)
-    PROG_BG  = (30,  35,  60)
-
-    img = Image.new("RGB", (W, H), BG)
-    d   = ImageDraw.Draw(img)
-
-    # Grid
-    for gy in range(0, H, 40):
-        d.line([(0, gy), (W, gy)], fill=GRID, width=1)
-    for gx in range(0, W, 40):
-        d.line([(gx, 0), (gx, H)], fill=GRID, width=1)
-
-    # Inset border
-    d.rectangle([(20, 20), (W - 20, H - 20)], outline=BORDER, width=1)
-
-    # Separator below title
-    d.line([(40, 110), (W - 40, 110)], fill=INDIGO, width=1)
-
-    # Slide title (centred, y=45)
-    f_title = _recap_font(36, bold=True)
-    tw = d.textlength(slide_title, font=f_title)
-    d.text(((W - tw) / 2, 45), slide_title, font=f_title, fill=slide_title_color)
-
-    # Word-by-word animated body text
-    f_word   = _recap_font(26)
-    x, y     = 60, 140
-    line_h   = 48
-
-    for wdata in all_words:
-        word  = wdata["word"]
-        wst   = wdata["start"]
-        wend  = wdata["end"]
-        space = word + " "
-
-        # Measure word + space
-        bbox = d.textbbox((0, 0), space, font=f_word)
-        ww   = bbox[2] - bbox[0]
-
-        # Wrap if needed
-        if x + ww > W - 60 and x > 60:
-            x  = 60
-            y += line_h
-
-        # Determine colour state
-        if wst <= current_time <= wend:
-            # Currently speaking — glow effect + bright indigo
-            for dx, dy in ((-1, 0), (1, 0), (0, -1), (0, 1)):
-                d.text((x + dx, y + dy), word, font=f_word, fill=GLOW)
-            d.text((x, y), word, font=f_word, fill=SPEAKING)
-        elif wst <= current_time:
-            # Already spoken — full white
-            d.text((x, y), word, font=f_word, fill=WHITE)
-        else:
-            # Not yet spoken — very dim
-            d.text((x, y), word, font=f_word, fill=DIM)
-
-        # Advance x (use space width for spacing)
-        space_bbox = d.textbbox((0, 0), " ", font=f_word)
-        x += ww
-
-    # Progress bar (y 700–708)
-    d.rectangle([(0, H - 20), (W, H)], fill=PROG_BG)
-    fill_w = int(W * slide_number / total_slides)
-    if fill_w > 0:
-        d.rectangle([(0, H - 20), (fill_w, H)], fill=INDIGO)
-
-    # Slide number indicator (bottom-right)
-    f_small = _recap_font(16)
-    indicator = f"{slide_number} / {total_slides}"
-    iw = d.textlength(indicator, font=f_small)
-    d.text((W - iw - 30, H - 35), indicator, font=f_small, fill=GRAY)
-
-    return img
-
-
-# ─── Recap Video — Slide Clip Builder ────────────────────────────────────────
-def create_slide_clip(
-    slide_title: str,
-    slide_title_color: tuple,
-    slide_script: str,
-    slide_audio_path: str,
-    word_timestamps: list[dict],
-    slide_number: int,
-):
-    """
-    Builds a MoviePy VideoClip for one slide with word-by-word text animation
-    synchronised to the audio.
-    """
-    from moviepy import VideoClip, AudioFileClip
-
-    audio = AudioFileClip(slide_audio_path)
-    duration = audio.duration
-
-    def make_frame(t):
-        frame_img = render_slide_frame(
-            image_width=1280,
-            image_height=720,
-            slide_title=slide_title,
-            slide_title_color=slide_title_color,
-            all_words=word_timestamps,
-            current_time=t,
-            slide_number=slide_number,
-            total_slides=4,
-        )
-        return np.array(frame_img)
-
-    clip = VideoClip(make_frame, duration=duration)
-    clip = clip.with_fps(24)
-    clip = clip.with_audio(audio)
-    return clip
+# ─── Recap Video — Audio Duration Helper ─────────────────────────────────────
+def _audio_duration_seconds(mp3_path: str) -> float:
+    """Return duration of an MP3 file in seconds using mutagen, or estimate from file size."""
+    try:
+        from mutagen.mp3 import MP3
+        return MP3(mp3_path).info.length
+    except Exception:
+        pass
+    try:
+        size = os.path.getsize(mp3_path)
+        # Rough estimate: 128 kbps → ~16000 bytes/sec
+        return max(1.0, size / 16000)
+    except Exception:
+        return 10.0
 
 
 # ─── Recap Video Generation ────────────────────────────────────────────────────
@@ -635,8 +496,6 @@ def generate_recap_video(
     """
     print(f"[generate_recap_video] called for lesson {lesson_number}: '{lesson_title}'")
     try:
-        from moviepy import concatenate_videoclips
-
         is_fr = (language or "").lower().startswith("fr")
 
         # ── Content generation (Groq) ──────────────────────────────────────────
@@ -717,34 +576,34 @@ def generate_recap_video(
         )
 
         # ── Slide configurations ───────────────────────────────────────────────
-        GOLD   = (245, 158,  11)
-        INDIGO = ( 99, 102, 241)
+        GOLD_HEX   = "#f59e0b"
+        INDIGO_HEX = "#6366f1"
 
         slide_configs = [
             {
-                "title":       "Pourquoi apprendre ceci ?" if is_fr else "Why does this matter?",
-                "title_color": GOLD,
-                "script":      scripts["slide1"],
+                "title":      "Pourquoi apprendre ceci ?" if is_fr else "Why does this matter?",
+                "accentColor": GOLD_HEX,
+                "script":     scripts["slide1"],
             },
             {
-                "title":       "À retenir" if is_fr else "Key Takeaway",
-                "title_color": INDIGO,
-                "script":      scripts["slide2"],
+                "title":      "À retenir" if is_fr else "Key Takeaway",
+                "accentColor": INDIGO_HEX,
+                "script":     scripts["slide2"],
             },
             {
-                "title":       "Dans la pratique" if is_fr else "In Practice",
-                "title_color": GOLD,
-                "script":      scripts["slide3"],
+                "title":      "Dans la pratique" if is_fr else "In Practice",
+                "accentColor": GOLD_HEX,
+                "script":     scripts["slide3"],
             },
             {
-                "title":       "Défi avant le quiz" if is_fr else "Challenge before the quiz",
-                "title_color": INDIGO,
-                "script":      scripts["slide4"],
+                "title":      "Défi avant le quiz" if is_fr else "Challenge before the quiz",
+                "accentColor": "#a78bfa",
+                "script":     scripts["slide4"],
             },
         ]
 
-        # ── Generate audio + build clips ───────────────────────────────────────
-        clips = []
+        # ── Generate audio for all 4 slides ───────────────────────────────────
+        slide_audio_data = []
         for i, cfg in enumerate(slide_configs):
             slide_num = i + 1
             print(f"[generate_recap_video] generating audio for slide {slide_num}...")
@@ -753,43 +612,72 @@ def generate_recap_video(
                 language=language,
                 slide_index=slide_num,
             )
-            print(f"[generate_recap_video] building clip for slide {slide_num}...")
-            clip = create_slide_clip(
-                slide_title=cfg["title"],
-                slide_title_color=cfg["title_color"],
-                slide_script=cfg["script"],
-                slide_audio_path=audio_path,
-                word_timestamps=word_ts,
-                slide_number=slide_num,
-            )
-            clips.append(clip)
+            duration = _audio_duration_seconds(audio_path)
+            slide_audio_data.append({
+                "audioFilePath": audio_path,
+                "words":         word_ts,
+                "audioDurationSeconds": duration,
+            })
 
-        # ── Concatenate & export ───────────────────────────────────────────────
-        final = concatenate_videoclips(clips, method="compose", padding=-0.5)
+        # ── Build VideoData JSON for Remotion ─────────────────────────────────
+        video_data = {
+            "lessonTitle":     lesson_title,
+            "language":        "fr" if is_fr else "en",
+            "flashcardCount":  len(flashcard_terms),
+            "quizCount":       5,
+            "estimatedReadTime": estimated_read_time,
+            "slides": [
+                {
+                    "title":               slide_configs[i]["title"],
+                    "accentColor":         slide_configs[i]["accentColor"],
+                    "script":              slide_configs[i]["script"],
+                    "words":               slide_audio_data[i]["words"],
+                    "audioDurationSeconds": slide_audio_data[i]["audioDurationSeconds"],
+                    "audioFilePath":       slide_audio_data[i]["audioFilePath"],
+                }
+                for i in range(4)
+            ],
+        }
 
         safe = re.sub(r"[^\w]", "_", lesson_title.encode("ascii", "ignore").decode())[:30]
         os.makedirs(os.path.join("uploads", "recap-videos"), exist_ok=True)
+
+        json_path = os.path.abspath(
+            os.path.join("uploads", "recap-videos", f"data_{lesson_number}_{safe}.json")
+        )
         out = os.path.abspath(
             os.path.join("uploads", "recap-videos", f"lesson_{lesson_number}_{safe}.mp4")
         )
-        print(f"[generate_recap_video] writing → {out}")
-        final.write_videofile(
-            out,
-            codec="libx264",
-            audio_codec="aac",
-            fps=24,
-            preset="ultrafast",
-            threads=4,
-            logger=None,
-        )
-        final.close()
-        for clip in clips:
-            try:
-                clip.close()
-            except Exception:
-                pass
 
-        # Clean up temp audio files
+        with open(json_path, "w", encoding="utf-8") as jf:
+            json.dump(video_data, jf, ensure_ascii=False, indent=2)
+
+        # ── Call Remotion renderer ─────────────────────────────────────────────
+        import subprocess
+        project_dir = os.path.abspath(os.path.dirname(__file__))
+        render_script = os.path.join(project_dir, "remotion-renderer", "render.mjs")
+
+        print(f"[generate_recap_video] calling Remotion renderer → {out}")
+        result = subprocess.run(
+            ["node", render_script, "--data", json_path, "--output", out],
+            cwd=project_dir,
+            capture_output=True,
+            text=True,
+            timeout=600,
+        )
+
+        if result.returncode != 0:
+            print(f"[generate_recap_video] Remotion stderr:\n{result.stderr}")
+            print(f"[generate_recap_video] Remotion stdout:\n{result.stdout}")
+            return None
+
+        print(result.stdout)
+
+        # ── Cleanup ────────────────────────────────────────────────────────────
+        try:
+            os.remove(json_path)
+        except Exception:
+            pass
         for tmp in glob.glob(os.path.join("uploads", "recap-videos", "temp_slide_*.mp3")):
             try:
                 os.remove(tmp)
