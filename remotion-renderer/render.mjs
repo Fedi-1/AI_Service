@@ -11,7 +11,7 @@
  */
 
 import { bundle } from "@remotion/bundler";
-import { ensureBrowser, renderMedia, selectComposition } from "@remotion/renderer";
+import { renderMedia, selectComposition } from "@remotion/renderer";
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
@@ -103,19 +103,9 @@ function writeBundleCache(serveUrl) {
 
 // ── Main ───────────────────────────────────────────────────────────────────────
 async function main() {
-  // 1. Ensure Chrome Headless Shell is present (downloads once, then instant)
-  console.log("[render.mjs] Ensuring browser is available…");
-  const browser = await ensureBrowser({
-    onBrowserDownload: ({ version }) => {
-      console.log(`[render.mjs] Downloading Chrome ${version} (one-time setup)…`);
-      return {
-        onProgress: ({ percent }) => {
-          process.stdout.write(`\r[render.mjs] Chrome download: ${Math.round(percent * 100)}%`);
-        },
-      };
-    },
-  });
-  console.log(`\n[render.mjs] Browser ready: ${browser.path}`);
+  // 1. Use the existing puppeteer-cached Chrome — no download needed
+  const CHROME_PATH = "C:\\Users\\firas\\.cache\\puppeteer\\chrome\\win64-131.0.6778.204\\chrome-win64\\chrome.exe";
+  console.log(`[render.mjs] Using existing Chrome: ${CHROME_PATH}`);
 
   // 2. Bundle (use cache if available)
   let bundled = readBundleCache();
@@ -144,7 +134,7 @@ async function main() {
       serveUrl: bundled,
       id: "LessonRecap",
       inputProps: videoData,
-      browserExecutable: browser.path,
+      browserExecutable: CHROME_PATH,
     });
   } catch (err) {
     console.error("[render.mjs] ERROR: selectComposition failed:", err.message);
@@ -176,7 +166,7 @@ async function main() {
       fps: 30,
       imageFormat: "jpeg",
       audioCodec: "aac",
-      browserExecutable: browser.path,
+      browserExecutable: CHROME_PATH,
       onProgress: ({ progress }) => {
         const pct = Math.round(progress * 100);
         process.stdout.write(`\r[render.mjs] Rendering: ${pct}%   `);

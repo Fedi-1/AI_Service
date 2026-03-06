@@ -12,3 +12,4 @@ numpy
 imageio-ffmpeg
 requests
 mutagen
+reportlab

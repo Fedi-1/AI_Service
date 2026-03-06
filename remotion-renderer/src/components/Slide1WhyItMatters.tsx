@@ -3,6 +3,7 @@ import { Audio, Easing, interpolate, spring, useCurrentFrame, useVideoConfig } f
 import { SlideData } from "../types";
 import AnimatedBackground from "./AnimatedBackground";
 import WordByWord from "./WordByWord";
+import SlideIllustration from "./SlideIllustration";
 
 interface Slide1Props {
   slide: SlideData;
@@ -108,9 +109,17 @@ const Slide1WhyItMatters: React.FC<Slide1Props> = ({
           currentTimeSeconds={currentTimeSeconds}
           fontSize={28}
           accentColor={slide.accentColor}
-          maxWidthPx={1150}
+          maxWidthPx={900}
         />
       </div>
+
+      {/* Illustration */}
+      <SlideIllustration
+        slideNumber={1}
+        currentTimeSeconds={currentTimeSeconds}
+        accentColor={slide.accentColor}
+        size={160}
+      />
 
       {/* Progress bar — slide 1 of 4 */}
       <div

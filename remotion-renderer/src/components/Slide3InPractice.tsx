@@ -1,26 +1,58 @@
 import React from "react";
-import { Audio, Easing, interpolate, spring, useCurrentFrame, useVideoConfig } from "remotion";
+import { Audio, interpolate, spring, useCurrentFrame, useVideoConfig } from "remotion";
 import { SlideData } from "../types";
 import AnimatedBackground from "./AnimatedBackground";
+import SlideIllustration from "./SlideIllustration";
 
 interface Slide3Props {
   slide: SlideData;
   currentTimeSeconds: number;
 }
 
+/**
+ * Parse the script into exactly 3 step strings.
+ * Prioritises lines that start with a digit + dot/paren (e.g. "1. Step one").
+ */
 function parseSteps(script: string): string[] {
-  // Split on numbered patterns: "1." "1)" "1 -"
-  const parts = script.split(/\n\s*\d+[.)]\s*|^\s*\d+[.)]\s*/m).map((p) => p.trim()).filter(Boolean);
-  if (parts.length >= 2) return parts.slice(0, 3);
-  const lines = script.split(/\n/).map((l) => l.trim()).filter(Boolean);
-  if (lines.length >= 2) return lines.slice(0, 3);
-  return [script.trim()];
+  const lines = script
+    .split("\n")
+    .map((l) => l.trim())
+    .filter(Boolean);
+
+  // Try numbered lines first: "1. ...", "2) ...", etc.
+  const numbered = lines
+    .filter((l) => /^\d+[.)]\s+/.test(l))
+    .map((l) => l.replace(/^\d+[.)]\s+/, "").trim());
+  if (numbered.length >= 3) return numbered.slice(0, 3);
+
+  // Fallback: non-empty lines
+  if (lines.length >= 3) return lines.slice(0, 3);
+
+  // Last fallback: split on sentences
+  const sentences = script
+    .split(/[.!?]+/)
+    .map((s) => s.trim())
+    .filter(Boolean);
+  if (sentences.length >= 3) {
+    const chunk = Math.ceil(sentences.length / 3);
+    return [
+      sentences.slice(0, chunk).join(". ") + ".",
+      sentences.slice(chunk, chunk * 2).join(". ") + ".",
+      sentences.slice(chunk * 2).join(". ") + ".",
+    ];
+  }
+
+  // Pad to 3 if we have fewer
+  const result = numbered.length > 0 ? [...numbered] : [script.trim()];
+  while (result.length < 3) result.push("");
+  return result.slice(0, 3);
 }
 
 const Slide3InPractice: React.FC<Slide3Props> = ({ slide, currentTimeSeconds }) => {
   const frame = useCurrentFrame();
-  const { fps } = useVideoConfig();
+  const { fps, durationInFrames } = useVideoConfig();
 
+  // Title spring
   const titleSpring = spring({
     fps,
     frame,
@@ -34,18 +66,11 @@ const Slide3InPractice: React.FC<Slide3Props> = ({ slide, currentTimeSeconds }) 
     extrapolateRight: "clamp",
   });
 
-  // Vertical connecting timeline line: height 0→430px over frames 20-90
-  const timelineHeight = interpolate(frame, [20, 90], [0, 430], {
-    extrapolateLeft: "clamp",
-    extrapolateRight: "clamp",
-  });
-
   const steps = parseSteps(slide.script);
-  const stepFrameStarts = [25, 55, 85];
 
-  // Per-step fill bar: fraction of step words spoken
-  const totalWords = slide.words.length;
-  const wordsPerStep = totalWords > 0 ? Math.ceil(totalWords / 3) : 1;
+  // Each step appears at 1/3, 2/3, 3/3 of the slide duration (in seconds)
+  const slideDuration = durationInFrames / fps;
+  const stepThresholds = [0, slideDuration / 3, (slideDuration * 2) / 3];
 
   return (
     <div style={{ width: 1280, height: 720, position: "relative", overflow: "hidden" }}>
@@ -70,7 +95,26 @@ const Slide3InPractice: React.FC<Slide3Props> = ({ slide, currentTimeSeconds }) 
         }}
       />
 
-      {/* Title */}
+      {/* Terminal glow — purely decorative */}
+      <div
+        style={{
+          position: "absolute",
+          top: "50%",
+          left: "50%",
+          transform: "translate(-50%, -50%)",
+          fontFamily: "monospace",
+          fontWeight: "bold",
+          fontSize: 140,
+          color: slide.accentColor,
+          opacity: 0.05,
+          userSelect: "none",
+          pointerEvents: "none",
+        }}
+      >
+        {`>`}
+      </div>
+
+      {/* Title section */}
       <div
         style={{
           position: "absolute",
@@ -106,123 +150,123 @@ const Slide3InPractice: React.FC<Slide3Props> = ({ slide, currentTimeSeconds }) 
         />
       </div>
 
-      {/* Vertical timeline line at x=85, y=130→560 */}
+      {/* Step cards */}
       <div
         style={{
           position: "absolute",
-          left: 85,
-          top: 130,
-          width: 2,
-          height: timelineHeight,
-          backgroundColor: slide.accentColor,
-          opacity: 0.4,
+          top: 148,
+          left: 60,
+          right: 60,
+          display: "flex",
+          flexDirection: "column",
+          gap: 36,
         }}
-      />
+      >
+        {steps.map((step, idx) => {
+          const isVisible = currentTimeSeconds >= stepThresholds[idx];
 
-      {/* Steps */}
-      {steps.map((step, idx) => {
-        const startF = stepFrameStarts[idx] ?? 25;
+          // Frame-based stagger for smooth entrance
+          const entryFrame = Math.round(stepThresholds[idx] * fps);
+          const localFrame = Math.max(0, frame - entryFrame);
 
-        const opacity = interpolate(frame, [startF, startF + 20], [0, 1], {
-          extrapolateLeft: "clamp",
-          extrapolateRight: "clamp",
-        });
+          const translateX = interpolate(localFrame, [0, 22], [-60, 0], {
+            extrapolateLeft: "clamp",
+            extrapolateRight: "clamp",
+          });
+          const opacity = interpolate(localFrame, [0, 22], [0, 1], {
+            extrapolateLeft: "clamp",
+            extrapolateRight: "clamp",
+          });
 
-        const circleScale = spring({
-          fps,
-          frame: Math.max(0, frame - startF),
-          config: { stiffness: 200, damping: 18 },
-          durationInFrames: 20,
-        });
+          const numberScale = spring({
+            fps,
+            frame: localFrame,
+            config: { stiffness: 200, damping: 18 },
+            durationInFrames: 20,
+          });
 
-        // Fill bar: fraction of this step's word chunk that has been spoken
-        const stepWordStart = idx * wordsPerStep;
-        const stepWordEnd = Math.min(stepWordStart + wordsPerStep, totalWords);
-        const stepWords = slide.words.slice(stepWordStart, stepWordEnd);
-        const spokenCount = stepWords.filter(
-          (w) => w.end <= currentTimeSeconds
-        ).length;
-        const fillFraction = stepWords.length > 0 ? spokenCount / stepWords.length : 0;
-        const fillBarWidth = fillFraction * 300;
+          // Fill bar grows after step is fully entered
+          const barWidth = interpolate(localFrame, [22, 52], [0, 100], {
+            extrapolateLeft: "clamp",
+            extrapolateRight: "clamp",
+          });
 
-        const topY = 140 + idx * 145;
-
-        return (
-          <div
-            key={idx}
-            style={{
-              position: "absolute",
-              top: topY,
-              left: 60,
-              right: 60,
-              opacity,
-              display: "flex",
-              alignItems: "flex-start",
-              gap: 24,
-            }}
-          >
-            {/* Step number circle at x≈70 relative to left:60 → absolute ~130 */}
+          return (
             <div
+              key={idx}
               style={{
-                width: 30,
-                height: 30,
-                borderRadius: "50%",
-                border: `2px solid ${slide.accentColor}`,
-                backgroundColor: "transparent",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                flexShrink: 0,
-                transform: `scale(${circleScale})`,
+                display: isVisible ? "flex" : "none",
+                alignItems: "flex-start",
+                gap: 20,
+                transform: `translateX(${translateX}px)`,
+                opacity,
               }}
             >
-              <span
+              {/* Step number circle */}
+              <div
                 style={{
+                  flexShrink: 0,
+                  width: 40,
+                  height: 40,
+                  borderRadius: "50%",
+                  backgroundColor: slide.accentColor,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
                   fontFamily: '"Playfair Display", serif',
                   fontWeight: "bold",
                   fontSize: 18,
-                  color: slide.accentColor,
+                  color: "rgb(10,15,35)",
+                  transform: `scale(${numberScale})`,
                 }}
               >
                 {idx + 1}
-              </span>
-            </div>
-
-            {/* Step text + fill bar */}
-            <div style={{ flex: 1 }}>
-              <div
-                style={{
-                  fontFamily: '"Playfair Display", serif',
-                  fontSize: 24,
-                  color: "rgb(255,255,255)",
-                  lineHeight: 1.5,
-                  marginBottom: 10,
-                }}
-              >
-                {step}
               </div>
-              {/* Fill bar */}
-              <div
-                style={{
-                  width: 300,
-                  height: 3,
-                  backgroundColor: "rgb(30,35,60)",
-                  borderRadius: 2,
-                }}
-              >
+
+              {/* Text + fill bar */}
+              <div style={{ flex: 1 }}>
                 <div
                   style={{
-                    width: fillBarWidth,
-                    height: "100%",
-                    backgroundColor: slide.accentColor,
-                    borderRadius: 2,
+                    fontFamily: '"Playfair Display", serif',
+                    fontSize: 25,
+                    color: "rgb(255,255,255)",
+                    lineHeight: 1.5,
+                    marginBottom: 8,
                   }}
-                />
+                >
+                  {step}
+                </div>
+                <div
+                  style={{
+                    height: 2,
+                    backgroundColor: "rgb(30,35,70)",
+                    borderRadius: 1,
+                  }}
+                >
+                  <div
+                    style={{
+                      height: "100%",
+                      width: `${barWidth}%`,
+                      backgroundColor: slide.accentColor,
+                      opacity: 0.6,
+                      borderRadius: 1,
+                      transition: "none",
+                    }}
+                  />
+                </div>
               </div>
             </div>
-          </div>
-        );
-      })}
+          );
+        })}
+      </div>
+
+      {/* Illustration */}
+      <SlideIllustration
+        slideNumber={3}
+        currentTimeSeconds={currentTimeSeconds}
+        accentColor={slide.accentColor}
+        size={160}
+      />
 
       {/* Progress bar — slide 3 of 4 */}
       <div

@@ -2,6 +2,7 @@ import React from "react";
 import { Audio, Easing, interpolate, spring, useCurrentFrame, useVideoConfig } from "remotion";
 import { SlideData } from "../types";
 import AnimatedBackground from "./AnimatedBackground";
+import SlideIllustration from "./SlideIllustration";
 
 interface Slide2Props {
   slide: SlideData;
@@ -180,6 +181,14 @@ const Slide2KeyConcepts: React.FC<Slide2Props> = ({ slide, currentTimeSeconds })
           );
         })}
       </div>
+
+      {/* Illustration */}
+      <SlideIllustration
+        slideNumber={2}
+        currentTimeSeconds={currentTimeSeconds}
+        accentColor={slide.accentColor}
+        size={160}
+      />
 
       {/* Progress bar — slide 2 of 4 */}
       <div

@@ -5,6 +5,8 @@
     "moduleResolution": "bundler",
     "jsx": "react",
     "strict": true,
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
     "outDir": "dist",
     "rootDir": "src",
     "types": ["remotion"]

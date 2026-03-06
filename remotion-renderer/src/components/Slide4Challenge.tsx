@@ -3,6 +3,7 @@ import { Audio, Easing, interpolate, spring, useCurrentFrame, useVideoConfig } f
 import { SlideData } from "../types";
 import AnimatedBackground from "./AnimatedBackground";
 import WordByWord from "./WordByWord";
+import SlideIllustration from "./SlideIllustration";
 
 const PURPLE = "rgb(167,139,250)";
 const PURPLE_LIGHT = "rgb(200,180,255)";
@@ -155,7 +156,7 @@ const Slide4Challenge: React.FC<Slide4Props> = ({
           currentTimeSeconds={currentTimeSeconds}
           fontSize={28}
           accentColor={PURPLE_LIGHT}
-          maxWidthPx={1150}
+          maxWidthPx={900}
         />
       </div>
 
@@ -199,6 +200,14 @@ const Slide4Challenge: React.FC<Slide4Props> = ({
           })}
         </div>
       )}
+
+      {/* Illustration */}
+      <SlideIllustration
+        slideNumber={4}
+        currentTimeSeconds={currentTimeSeconds}
+        accentColor={PURPLE}
+        size={160}
+      />
 
       {/* Progress bar — slide 4 of 4 (full) */}
       <div

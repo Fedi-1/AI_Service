@@ -51,6 +51,7 @@ CHUNK_WORD_SIZE      = 800
 MAX_CHUNKS           = 10
 
 os.makedirs("uploads/recap-videos", exist_ok=True)
+os.makedirs("uploads/certificates", exist_ok=True)
 
 
 # ─── Text Extraction ────────────────────────────────────────────────────────────
@@ -315,7 +316,7 @@ Slide 1 is about why this lesson matters in the real world. Base it on this hook
 
 Slide 2 is about key concepts to remember. Base it on: {key_takeaway}. Write 3 to 4 sentences that introduce each key point conversationally, connecting them together naturally.
 
-Slide 3 is about practical application. Base it on: {practical_tip}. Write 3 sentences that guide the student through what to do next, using encouraging and actionable language.
+Slide 3 is about practical application. Base it on: {practical_tip}. Write EXACTLY 3 separate practical steps. Format them strictly as 3 lines: line 1 starts with '1. ' followed by the step text, line 2 starts with '2. ' followed by the step text, line 3 starts with '3. ' followed by the step text. Each step is one complete sentence describing a specific concrete action using a real tool or technology. Do NOT combine steps into one paragraph. Do NOT add any text before or after the 3 numbered lines. Return only the 3 lines.
 
 Slide 4 is a challenge question to prepare the student for the quiz. Use this question: {challenge_question}. Write 2 sentences: first tell the student to think carefully about the question, then state the question clearly.
 
@@ -335,14 +336,14 @@ Return ONLY a valid JSON object with exactly 4 fields: slide1, slide2, slide3, s
             return {
                 "slide1": f"{real_world_hook} Ce concept joue un rôle fondamental dans de nombreuses technologies modernes que vous utilisez au quotidien.",
                 "slide2": f"{key_takeaway} Ces points essentiels forment la base de votre compréhension de ce sujet.",
-                "slide3": f"{practical_tip} Appliquer ces étapes vous aidera à consolider votre apprentissage.",
+                "slide3": f"1. {practical_tip}\n2. Pratiquez avec un exemple concret sur votre machine.\n3. Comparez votre résultat avec la documentation officielle.",
                 "slide4": f"Prenez un moment pour réfléchir attentivement à cette question avant de passer au quiz. {challenge_question}",
             }
         else:
             return {
                 "slide1": f"{real_world_hook} This concept plays a fundamental role in many modern technologies you use every day.",
                 "slide2": f"{key_takeaway} These essential points form the foundation of your understanding of this topic.",
-                "slide3": f"{practical_tip} Applying these steps will help you consolidate your learning.",
+                "slide3": f"1. {practical_tip}\n2. Practice with a concrete example in your development environment.\n3. Compare your result against the official documentation.",
                 "slide4": f"Take a moment to think carefully about this question before moving on to the quiz. {challenge_question}",
             }
 
@@ -535,11 +536,15 @@ def generate_recap_video(
 
         try:
             tip_prompt = (
-                f"Donne exactement 3 étapes pratiques qu'un étudiant peut suivre pour pratiquer et appliquer les concepts "
-                f"d'une leçon sur \"{lesson_title}\". Format : 3 étapes numérotées courtes. Maximum 15 mots par étape. Réponds en français."
+                f"Donne exactement 3 étapes pratiques concrètes pour quelqu'un qui apprend \"{lesson_title}\". "
+                f"Chaque étape doit mentionner un outil, une méthode ou une technologie spécifique. "
+                f"Retourne exactement 3 lignes formatées strictement comme '1. [étape]' retour à la ligne '2. [étape]' retour à la ligne '3. [étape]'. "
+                f"Maximum 18 mots par étape. Réponds en français. Retourne uniquement les 3 lignes sans texte supplémentaire."
                 if is_fr else
-                f"Give exactly 3 practical steps a student can follow to practice and apply the concepts from a lesson "
-                f"about \"{lesson_title}\". Format as 3 short numbered steps. Each step maximum 15 words. Respond in English."
+                f"Give exactly 3 concrete practical steps for someone learning about \"{lesson_title}\". "
+                f"Each step must mention a specific tool, method, or technology. "
+                f"Return exactly 3 lines formatted strictly as '1. [step]' newline '2. [step]' newline '3. [step]'. "
+                f"Maximum 18 words per step. Respond in English. Return only the 3 lines with no extra text or explanation."
             )
             practical_tip = groq_chat(tip_prompt, temperature=0.7, max_tokens=200).strip()
         except Exception:
@@ -977,6 +982,239 @@ async def generate_lesson_recap_endpoint(request: GenerateLessonRecapRequest):
     except Exception as e:
         traceback.print_exc()
         raise HTTPException(status_code=502, detail=f"Video generation failed: {str(e)}")
+
+
+# ─── Certificate generation ──────────────────────────────────────────────────
+
+class CertificateRequest(BaseModel):
+    certificateUuid: str
+    studentName: str
+    courseTitle: str
+    score: int
+    issuedAt: str
+
+
+def generate_certificate_html(
+    certificate_uuid: str,
+    student_name: str,
+    course_title: str,
+    score: int,
+    issued_at: str,
+) -> str:
+    """Return a self-contained A4-landscape HTML string (kept for reference)."""
+    try:
+        from datetime import datetime
+        dt = datetime.fromisoformat(issued_at.replace("Z", "+00:00"))
+        date_str = dt.strftime("%B %d, %Y")
+    except Exception:
+        date_str = issued_at[:10]
+
+    return f"""<!DOCTYPE html><html><body>
+    <h1>Certificate of Achievement</h1>
+    <p>{student_name} — {course_title} — Score: {score}% — {date_str}</p>
+    </body></html>"""
+
+
+def generate_certificate_pdf(
+    certificate_uuid: str,
+    student_name: str,
+    course_title: str,
+    score: int,
+    issued_at: str,
+) -> str:
+    """Generate a styled A4-landscape PDF certificate using ReportLab."""
+    from reportlab.pdfgen import canvas
+    from reportlab.lib.pagesizes import A4, landscape
+    from reportlab.lib import colors
+    from reportlab.lib.units import mm
+    from reportlab.pdfbase import pdfmetrics
+    from reportlab.pdfbase.ttfonts import TTFont
+
+    try:
+        from datetime import datetime
+        dt = datetime.fromisoformat(issued_at.replace("Z", "+00:00"))
+        date_str = dt.strftime("%B %d, %Y")
+    except Exception:
+        date_str = issued_at[:10]
+
+    pdf_path = os.path.join("uploads", "certificates", f"certificate_{certificate_uuid}.pdf")
+    page_w, page_h = landscape(A4)   # 842 x 595 pt
+
+    c = canvas.Canvas(pdf_path, pagesize=landscape(A4))
+
+    # ── Background ────────────────────────────────────────────────────────────
+    c.setFillColor(colors.HexColor("#FFFDF5"))
+    c.rect(0, 0, page_w, page_h, fill=1, stroke=0)
+
+    # ── Outer border (navy) ───────────────────────────────────────────────────
+    c.setStrokeColor(colors.HexColor("#1A3A6B"))
+    c.setLineWidth(5)
+    margin = 18
+    c.rect(margin, margin, page_w - 2*margin, page_h - 2*margin, fill=0, stroke=1)
+
+    # ── Inner border (gold) ───────────────────────────────────────────────────
+    c.setStrokeColor(colors.HexColor("#C9A84C"))
+    c.setLineWidth(1.5)
+    inner = margin + 10
+    c.rect(inner, inner, page_w - 2*inner, page_h - 2*inner, fill=0, stroke=1)
+
+    # ── Corner ornaments ──────────────────────────────────────────────────────
+    c.setStrokeColor(colors.HexColor("#C9A84C"))
+    c.setLineWidth(2)
+    orn = 28   # ornament arm length
+    corners = [
+        (inner + 4, inner + 4),                          # BL
+        (page_w - inner - 4, inner + 4),                 # BR
+        (inner + 4, page_h - inner - 4),                 # TL
+        (page_w - inner - 4, page_h - inner - 4),        # TR
+    ]
+    for cx, cy in corners:
+        # horizontal arm
+        dx = orn if cx < page_w / 2 else -orn
+        c.line(cx, cy, cx + dx, cy)
+        # vertical arm
+        dy = orn if cy < page_h / 2 else -orn
+        c.line(cx, cy, cx, cy + dy)
+
+    # ── Gold divider ──────────────────────────────────────────────────────────
+    c.setStrokeColor(colors.HexColor("#C9A84C"))
+    c.setLineWidth(1.2)
+    div_y = page_h - 105
+    c.line(page_w * 0.3, div_y, page_w * 0.7, div_y)
+
+    # ── Logo / platform name ──────────────────────────────────────────────────
+    c.setFillColor(colors.HexColor("#1A3A6B"))
+    c.setFont("Helvetica-Bold", 11)
+    c.drawCentredString(page_w / 2, page_h - 60, "✦  LEARNAI PLATFORM  ✦")
+
+    # ── Headline ──────────────────────────────────────────────────────────────
+    c.setFont("Helvetica-Bold", 26)
+    c.setFillColor(colors.HexColor("#1A3A6B"))
+    c.drawCentredString(page_w / 2, page_h - 90, "CERTIFICATE OF ACHIEVEMENT")
+
+    # ── "This is to certify that" ─────────────────────────────────────────────
+    c.setFont("Helvetica", 12)
+    c.setFillColor(colors.HexColor("#555555"))
+    c.drawCentredString(page_w / 2, page_h - 125, "This is to certify that")
+
+    # ── Student name ──────────────────────────────────────────────────────────
+    c.setFont("Helvetica-BoldOblique", 34)
+    c.setFillColor(colors.HexColor("#1A3A6B"))
+    c.drawCentredString(page_w / 2, page_h - 178, student_name)
+
+    # Underline beneath name
+    name_width = c.stringWidth(student_name, "Helvetica-BoldOblique", 34)
+    line_x1 = page_w / 2 - name_width / 2 - 10
+    line_x2 = page_w / 2 + name_width / 2 + 10
+    c.setStrokeColor(colors.HexColor("#C9A84C"))
+    c.setLineWidth(1.2)
+    c.line(line_x1, page_h - 184, line_x2, page_h - 184)
+
+    # ── "has successfully completed" ──────────────────────────────────────────
+    c.setFont("Helvetica", 12)
+    c.setFillColor(colors.HexColor("#333333"))
+    c.drawCentredString(page_w / 2, page_h - 210, "has successfully completed the course")
+
+    # ── Course title ──────────────────────────────────────────────────────────
+    c.setFont("Helvetica-Bold", 16)
+    c.setFillColor(colors.HexColor("#1A3A6B"))
+    # Truncate long titles
+    max_chars = 60
+    display_title = f"\u201c{course_title[:max_chars]}{'...' if len(course_title) > max_chars else ''}\u201d"
+    c.drawCentredString(page_w / 2, page_h - 238, display_title)
+
+    # ── Score badge ───────────────────────────────────────────────────────────
+    badge_w, badge_h = 110, 24
+    badge_x = page_w / 2 - badge_w / 2
+    badge_y = page_h - 278
+    c.setFillColor(colors.HexColor("#1A3A6B"))
+    c.roundRect(badge_x, badge_y, badge_w, badge_h, 12, fill=1, stroke=0)
+    c.setFillColor(colors.white)
+    c.setFont("Helvetica-Bold", 12)
+    c.drawCentredString(page_w / 2, badge_y + 7, f"Score: {score}%")
+
+    # ── Bottom gold divider ───────────────────────────────────────────────────
+    c.setStrokeColor(colors.HexColor("#C9A84C"))
+    c.setLineWidth(1)
+    bottom_div_y = 95
+    c.line(page_w * 0.1, bottom_div_y, page_w * 0.9, bottom_div_y)
+
+    # ── Bottom 3-column section ───────────────────────────────────────────────
+    col_y_label = 75
+    col_y_value = 58
+
+    # Left: date
+    c.setFont("Helvetica", 8)
+    c.setFillColor(colors.HexColor("#777777"))
+    c.drawCentredString(page_w * 0.22, col_y_label, "DATE ISSUED")
+    c.setFont("Helvetica-Bold", 10)
+    c.setFillColor(colors.HexColor("#222222"))
+    c.drawCentredString(page_w * 0.22, col_y_value, date_str)
+    # Signature line
+    c.setStrokeColor(colors.HexColor("#999999"))
+    c.setLineWidth(0.8)
+    c.line(page_w * 0.22 - 50, col_y_label + 14, page_w * 0.22 + 50, col_y_label + 14)
+
+    # Center: seal circle
+    seal_cx = page_w / 2
+    seal_cy = 68
+    c.setFillColor(colors.HexColor("#1A3A6B"))
+    c.circle(seal_cx, seal_cy, 26, fill=1, stroke=0)
+    c.setStrokeColor(colors.HexColor("#C9A84C"))
+    c.setLineWidth(2)
+    c.circle(seal_cx, seal_cy, 26, fill=0, stroke=1)
+    c.setFillColor(colors.HexColor("#C9A84C"))
+    c.setFont("Helvetica-Bold", 18)
+    c.drawCentredString(seal_cx, seal_cy - 6, "\u2605")
+
+    # Right: certificate ID
+    short_uuid = certificate_uuid[:18] + "…"
+    c.setFont("Helvetica", 8)
+    c.setFillColor(colors.HexColor("#777777"))
+    c.drawCentredString(page_w * 0.78, col_y_label, "CERTIFICATE ID")
+    c.setFont("Helvetica-Bold", 8)
+    c.setFillColor(colors.HexColor("#222222"))
+    c.drawCentredString(page_w * 0.78, col_y_value, short_uuid)
+    c.setStrokeColor(colors.HexColor("#999999"))
+    c.setLineWidth(0.8)
+    c.line(page_w * 0.78 - 50, col_y_label + 14, page_w * 0.78 + 50, col_y_label + 14)
+
+    c.save()
+    return pdf_path
+
+
+@app.post("/api/generate-certificate")
+async def generate_certificate_endpoint(req: CertificateRequest):
+    """Generate a PDF certificate and return the file path."""
+    try:
+        pdf_path = generate_certificate_pdf(
+            certificate_uuid=req.certificateUuid,
+            student_name=req.studentName,
+            course_title=req.courseTitle,
+            score=req.score,
+            issued_at=req.issuedAt,
+        )
+        return {"pdfFilePath": pdf_path, "status": "generated"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Certificate generation failed: {str(e)}")
+
+
+@app.get("/api/certificates/download")
+async def download_certificate(path: str = Query(..., description="PDF file path")):
+    """Serve a certificate PDF file by path."""
+    from fastapi.responses import FileResponse
+    if not os.path.exists(path):
+        raise HTTPException(status_code=404, detail="Certificate PDF not found.")
+    # Security: only allow paths inside uploads/certificates/
+    abs_path = os.path.abspath(path)
+    allowed_dir = os.path.abspath("uploads/certificates")
+    if not abs_path.startswith(allowed_dir):
+        raise HTTPException(status_code=403, detail="Access denied.")
+    return FileResponse(abs_path, media_type="application/pdf",
+                        filename=os.path.basename(abs_path))
 
 
 @app.post("/process-document")
