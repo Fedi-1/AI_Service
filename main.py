@@ -51,7 +51,6 @@ CHUNK_WORD_SIZE      = 800
 MAX_CHUNKS           = 10
 
 os.makedirs("uploads/recap-videos", exist_ok=True)
-os.makedirs("uploads/certificates", exist_ok=True)
 
 
 # ─── Text Extraction ────────────────────────────────────────────────────────────
@@ -700,10 +699,20 @@ def generate_recap_video(
 
 
 # ─── On-demand Quiz Generation ──────────────────────────────────────────────────
-def generate_quiz_questions(lesson_content: str) -> list:
+def generate_quiz_questions(lesson_content: str, previous_questions: list[str] = []) -> list:
     """Generate exactly 5 fresh quiz questions from lesson content using high-temperature sampling."""
-    prompt = f"""You are a quiz generator for an e-learning platform. Your task is to generate exactly 5 quiz questions based on the lesson content provided.
+    exclusion_block = ""
+    if previous_questions:
+        formatted = "\n".join(f"  - {q}" for q in previous_questions)
+        exclusion_block = f"""
+FORBIDDEN QUESTIONS — these questions were already used in previous attempts. You MUST NOT generate any question that is similar in meaning, structure, or topic to any of the following:
+{formatted}
 
+If you repeat or closely paraphrase any of these, it is a critical failure.
+"""
+
+    prompt = f"""You are a quiz generator for an e-learning platform. Your task is to generate exactly 5 quiz questions based on the lesson content provided.
+{exclusion_block}
 CRITICAL INSTRUCTION — ANGLE OF APPROACH:
 Every time you are called you must approach the lesson from a completely different angle.
 Do NOT generate questions about the most obvious or prominent concepts — instead pick less obvious facts, edge cases, nuances, or relationships between concepts that a student might overlook or take for granted.
@@ -755,6 +764,7 @@ Lesson content:
 
 class GenerateQuizRequest(BaseModel):
     lessonContent: str
+    previousQuestions: list[str] = []
 
 
 class GenerateExamRequest(BaseModel):
@@ -932,11 +942,11 @@ async def generate_quiz(request: GenerateQuizRequest):
     if not request.lessonContent or len(request.lessonContent.strip()) < 50:
         raise HTTPException(status_code=400, detail="lessonContent is too short to generate questions.")
     try:
-        questions = generate_quiz_questions(request.lessonContent)
+        questions = generate_quiz_questions(request.lessonContent, request.previousQuestions)
     except (json.JSONDecodeError, Exception):
         # Retry once on parse failure
         try:
-            questions = generate_quiz_questions(request.lessonContent)
+            questions = generate_quiz_questions(request.lessonContent, request.previousQuestions)
         except Exception as retry_err:
             raise HTTPException(status_code=502, detail=f"Quiz generation failed: {str(retry_err)}")
     return questions
@@ -1185,7 +1195,7 @@ def generate_certificate_pdf(
 
 @app.post("/api/generate-certificate")
 async def generate_certificate_endpoint(req: CertificateRequest):
-    """Generate a PDF certificate and return the file path."""
+    """Generate a PDF certificate, return the content as base64, and delete the file."""
     try:
         pdf_path = generate_certificate_pdf(
             certificate_uuid=req.certificateUuid,
@@ -1194,27 +1204,16 @@ async def generate_certificate_endpoint(req: CertificateRequest):
             score=req.score,
             issued_at=req.issuedAt,
         )
-        return {"pdfFilePath": pdf_path, "status": "generated"}
+        with open(pdf_path, "rb") as f:
+            pdf_bytes = f.read()
+        os.remove(pdf_path)
+        pdf_base64 = base64.b64encode(pdf_bytes).decode("utf-8")
+        return {"pdfContent": pdf_base64, "status": "generated"}
     except HTTPException:
         raise
     except Exception as e:
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Certificate generation failed: {str(e)}")
-
-
-@app.get("/api/certificates/download")
-async def download_certificate(path: str = Query(..., description="PDF file path")):
-    """Serve a certificate PDF file by path."""
-    from fastapi.responses import FileResponse
-    if not os.path.exists(path):
-        raise HTTPException(status_code=404, detail="Certificate PDF not found.")
-    # Security: only allow paths inside uploads/certificates/
-    abs_path = os.path.abspath(path)
-    allowed_dir = os.path.abspath("uploads/certificates")
-    if not abs_path.startswith(allowed_dir):
-        raise HTTPException(status_code=403, detail="Access denied.")
-    return FileResponse(abs_path, media_type="application/pdf",
-                        filename=os.path.basename(abs_path))
 
 
 @app.post("/process-document")
