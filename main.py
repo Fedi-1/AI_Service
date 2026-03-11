@@ -16,6 +16,7 @@ from dotenv import load_dotenv
 from fastapi import FastAPI, File, HTTPException, Query, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+from typing import Optional
 from groq import Groq
 from pptx import Presentation
 
@@ -39,7 +40,7 @@ app = FastAPI(title="LearnAI AI Service", version="1.0.0")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:8069"],
+    allow_origins=["http://localhost:8069", "http://localhost:4200"],
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -1310,3 +1311,73 @@ async def process_document(
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
+
+
+# ─── Chatbot ─────────────────────────────────────────────────────────────────────
+
+class ChatMessage(BaseModel):
+    role: str
+    content: str
+
+
+class ChatRequest(BaseModel):
+    messages: list[ChatMessage]
+    mode: str = "visitor"
+    context: Optional[str] = None
+
+
+def groq_chat_multi(system_prompt: str, messages: list[ChatMessage]) -> str:
+    """Multi-turn chat completion call to Groq with a system prompt."""
+    built_messages = [{"role": "system", "content": system_prompt}] + [
+        {"role": m.role, "content": m.content} for m in messages
+    ]
+    response = client.chat.completions.create(
+        model=MODEL,
+        messages=built_messages,
+        max_tokens=1024,
+    )
+    return response.choices[0].message.content.strip()
+
+
+@app.post("/api/chat")
+async def chat_endpoint(request: ChatRequest):
+    """Multi-turn AI chatbot. Supports visitor (platform FAQ) and student (lesson help) modes."""
+    if not request.messages:
+        raise HTTPException(status_code=400, detail="messages array must not be empty.")
+
+    if request.mode == "student":
+        if request.context:
+            system_prompt = (
+                "You are a helpful learning assistant for LearnAI. "
+                "You help students understand their course content. "
+                "Use the following lesson content to answer the student's questions accurately and clearly. "
+                "If the question is not related to the lesson content, answer from your general knowledge "
+                "but always stay focused on helping the student learn.\n\n"
+                f"Lesson content:\n{request.context}"
+            )
+        else:
+            system_prompt = (
+                "You are a helpful learning assistant for LearnAI. "
+                "Help the student with their learning questions. "
+                "Be clear, concise, and educational."
+            )
+    else:
+        # visitor mode (default)
+        system_prompt = (
+            "You are the LearnAI assistant. "
+            "LearnAI is an AI-powered personalized learning platform. "
+            "Students upload their academic documents (PDF, DOCX) and the platform automatically generates "
+            "a complete personalized course including lessons, quizzes, flashcards, and a final exam. "
+            "Students can earn certificates after passing the final exam. "
+            "The platform uses Llama 3.3 70B for content generation, ElevenLabs for lesson recap narration, "
+            "and includes an anti-cheating system during exams. "
+            "Answer questions about the platform clearly and concisely. "
+            "If asked something unrelated to the platform, politely redirect the conversation back to LearnAI."
+        )
+
+    try:
+        reply = groq_chat_multi(system_prompt, request.messages)
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Chat generation failed: {str(e)}")
+
+    return {"reply": reply}
