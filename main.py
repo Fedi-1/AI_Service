@@ -236,8 +236,7 @@ This lesson must build forward on those lessons. Assume the student already know
 
 Return ONLY a valid JSON object. No markdown, no code fences, no text outside the JSON.
 
-LANGUAGE RULE: Detect the language of the text content below and write ALL fields (title, summary, content, questions, explanations, flashcards) in that SAME language. If the text is in French, respond in French. If in English, respond in English.
-- If the source is French: write in pure, correct French. Do NOT mix in Spanish, English, or any other language. If a technical term has no French equivalent, write that term in English but keep all surrounding text in French.
+LANGUAGE RULE: Detect the language of the text content below and write ALL fields (title, summary, content, questions, explanations, flashcards) in that SAME language. If the source is French: write in pure, correct French. Do NOT mix in Spanish, English, or any other language. If a technical term has no French equivalent, write that term in English but keep all surrounding text in French.
 {prior_context}
 FIELD DEFINITIONS — follow these strictly:
 
@@ -1347,20 +1346,18 @@ async def chat_endpoint(request: ChatRequest):
 
     if request.mode == "student":
         if request.context:
-            system_prompt = (
-                "You are a helpful learning assistant for LearnAI. "
-                "You help students understand their course content. "
-                "Use the following lesson content to answer the student's questions accurately and clearly. "
-                "If the question is not related to the lesson content, answer from your general knowledge "
-                "but always stay focused on helping the student learn.\n\n"
-                f"Lesson content:\n{request.context}"
-            )
+            system_prompt = f"""You are a helpful learning 
+assistant for the LearnAI platform. The student is 
+currently studying the following lesson content:
+
+{request.context}
+
+Answer questions based on this lesson content. 
+Be concise, clear, and educational."""
         else:
-            system_prompt = (
-                "You are a helpful learning assistant for LearnAI. "
-                "Help the student with their learning questions. "
-                "Be clear, concise, and educational."
-            )
+            system_prompt = """You are a helpful learning 
+assistant for the LearnAI platform. Help the student 
+with their learning questions."""
     else:
         # visitor mode (default)
         system_prompt = (
