@@ -14,5 +14,8 @@
     "react-dom": "^18.3.1",
     "remotion": "4.0.291",
     "typescript": "^5.7.3"
+  },
+  "devDependencies": {
+    "@remotion/cli": "^4.0.291"
   }
 }

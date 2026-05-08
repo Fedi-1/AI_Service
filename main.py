@@ -1,4 +1,4 @@
-import io
+﻿import io
 import json
 import math
 import os
@@ -20,7 +20,7 @@ from typing import Optional
 from groq import Groq
 from pptx import Presentation
 
-# ─── Environment ────────────────────────────────────────────────────────────────
+# â”€â”€â”€ Environment â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 load_dotenv()
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 if not GROQ_API_KEY:
@@ -29,13 +29,13 @@ if not GROQ_API_KEY:
 ELEVENLABS_API_KEY = os.getenv("ELEVENLABS_API_KEY", "")
 
 # ElevenLabs voice IDs
-ELEVENLABS_VOICE_FR = "nPczCjzI2devNBz1zQrb"   # Brian — calm professional male (French)
-ELEVENLABS_VOICE_EN = "21m00Tcm4TlvDq8ikWAM"   # Rachel — clear professional female (English)
+ELEVENLABS_VOICE_FR = "nPczCjzI2devNBz1zQrb"   # Brian â€” calm professional male (French)
+ELEVENLABS_VOICE_EN = "21m00Tcm4TlvDq8ikWAM"   # Rachel â€” clear professional female (English)
 
 client = Groq(api_key=GROQ_API_KEY)
 MODEL  = "llama-3.3-70b-versatile"   # fast, free-tier Groq model
 
-# ─── App ────────────────────────────────────────────────────────────────────────
+# â”€â”€â”€ App â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 app = FastAPI(title="LearnAI AI Service", version="1.0.0")
 
 app.add_middleware(
@@ -45,7 +45,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# ─── Constants ──────────────────────────────────────────────────────────────────
+# â”€â”€â”€ Constants â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 SUPPORTED_FILE_TYPES = {"PDF", "DOCX", "PPTX", "IMAGE"}
 MIN_TEXT_LENGTH      = 50
 CHUNK_WORD_SIZE      = 800
@@ -54,7 +54,7 @@ MAX_CHUNKS           = 10
 os.makedirs("uploads/recap-videos", exist_ok=True)
 
 
-# ─── Text Extraction ────────────────────────────────────────────────────────────
+# â”€â”€â”€ Text Extraction â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 def extract_text_pdf(file_bytes: bytes) -> str:
     reader = pypdf.PdfReader(io.BytesIO(file_bytes))
     pages = [page.extract_text() or "" for page in reader.pages]
@@ -134,7 +134,7 @@ def extract_text(file_bytes: bytes, file_type: str, filename: str = "") -> str:
         raise ValueError(f"Unsupported file type: {file_type}")
 
 
-# ─── Text Chunking ──────────────────────────────────────────────────────────────
+# â”€â”€â”€ Text Chunking â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 def split_into_chunks(text: str) -> list[str]:
     words  = text.split()
     chunks = []
@@ -146,7 +146,7 @@ def split_into_chunks(text: str) -> list[str]:
     return chunks
 
 
-# ─── Groq Helpers ───────────────────────────────────────────────────────────────
+# â”€â”€â”€ Groq Helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 def clean_json_response(raw: str) -> str:
     """Strip markdown code fences and sanitize control characters inside JSON strings."""
     raw = raw.strip()
@@ -202,8 +202,8 @@ def generate_course_description(text_preview: str) -> str:
 
 def detect_category(text_preview: str) -> str:
     predefined = (
-        "Informatique, Mathématiques, Physique, Chimie, Biologie, "
-        "Langues, Gestion, Droit, Électronique, Mécanique"
+        "Informatique, MathÃ©matiques, Physique, Chimie, Biologie, "
+        "Langues, Gestion, Droit, Ã‰lectronique, MÃ©canique"
     )
     prompt = (
         f"You are a document classifier. Read the following text excerpt and determine its academic or professional category.\n\n"
@@ -238,13 +238,13 @@ Return ONLY a valid JSON object. No markdown, no code fences, no text outside th
 
 LANGUAGE RULE: Detect the language of the text content below and write ALL fields (title, summary, content, questions, explanations, flashcards) in that SAME language. If the source is French: write in pure, correct French. Do NOT mix in Spanish, English, or any other language. If a technical term has no French equivalent, write that term in English but keep all surrounding text in French.
 {prior_context}
-FIELD DEFINITIONS — follow these strictly:
+FIELD DEFINITIONS â€” follow these strictly:
 
 "summary":
 - Write exactly 3 to 4 sentences in PAST TENSE, as a conclusion of what was just taught.
 - It must reflect what the student now understands after completing this lesson.
-- NEVER start with phrases like "this lesson covers", "we will explore", "students will learn", "ce cours couvre", "nous allons explorer", "les étudiants apprendront", or any forward-looking introduction.
-- Start directly with what was explained — for example: "This lesson explored...", "We examined...", "Cette leçon a mis en lumière...", "Nous avons vu que..."
+- NEVER start with phrases like "this lesson covers", "we will explore", "students will learn", "ce cours couvre", "nous allons explorer", "les Ã©tudiants apprendront", or any forward-looking introduction.
+- Start directly with what was explained â€” for example: "This lesson explored...", "We examined...", "Cette leÃ§on a mis en lumiÃ¨re...", "Nous avons vu que..."
 - Do NOT teach or explain anything here. Only conclude.
 
 "content":
@@ -262,7 +262,7 @@ JSON structure:
   "lessonNumber": {lesson_number},
   "title": "Descriptive lesson title",
   "summary": "Past-tense conclusion of what this lesson taught and what the student now understands.",
-  "content": "Paragraph 1: Introduce the topic from scratch — what is it, where does it come from, why does it matter...\\n\\nParagraph 2: Explain the first key concept in depth — what it is, why it exists, how it works, with a real-world example...\\n\\nParagraph 3: Explain the second key concept in depth — what it is, why it exists, how it works, with a real-world example...\\n\\nParagraph 4: Explain the third key concept or go deeper into relationships between concepts, with comparisons or analogies...\\n\\nParagraph 5: Synthesize everything — how the concepts connect, what a student should take away, practical implications...",
+  "content": "Paragraph 1: Introduce the topic from scratch â€” what is it, where does it come from, why does it matter...\\n\\nParagraph 2: Explain the first key concept in depth â€” what it is, why it exists, how it works, with a real-world example...\\n\\nParagraph 3: Explain the second key concept in depth â€” what it is, why it exists, how it works, with a real-world example...\\n\\nParagraph 4: Explain the third key concept or go deeper into relationships between concepts, with comparisons or analogies...\\n\\nParagraph 5: Synthesize everything â€” how the concepts connect, what a student should take away, practical implications...",
   "estimatedReadTime": 8,
   "flashcards": [
     {{
@@ -274,14 +274,14 @@ JSON structure:
 }}
 
 Rules:
-- "summary" MUST be in past tense — it is a conclusion, not an introduction
+- "summary" MUST be in past tense â€” it is a conclusion, not an introduction
 - "summary" MUST NOT start with forward-looking phrases (covers, will learn, allons explorer, etc.)
-- "summary" and "content" MUST be completely different texts — never copy one into the other
+- "summary" and "content" MUST be completely different texts â€” never copy one into the other
 - "content" MUST NOT re-explain concepts already covered in previous lessons
-- "content" = professor-style teaching, every new concept explained with what/why/how/example; 5 paragraphs if the source has enough distinct concepts, otherwise 3 solid paragraphs — never pad with repeated ideas
-- If source language is French: write in pure French only — no Spanish, no mixing; technical terms with no French equivalent may stay in English
+- "content" = professor-style teaching, every new concept explained with what/why/how/example; 5 paragraphs if the source has enough distinct concepts, otherwise 3 solid paragraphs â€” never pad with repeated ideas
+- If source language is French: write in pure French only â€” no Spanish, no mixing; technical terms with no French equivalent may stay in English
 - "estimatedReadTime" = estimated reading time in minutes for the content field (integer, minimum 1). Calculate it as: word count of the content field divided by 200, rounded up.
-- For each flashcard "difficulty": assign EASY for basic definitions any beginner understands after one read; MEDIUM for concepts requiring understanding of relationships or how a mechanism works in practice; HARD for concepts requiring deep understanding, involving multiple interrelated ideas, or likely to be confused with similar concepts. You MUST distribute difficulty realistically — do not assign MEDIUM to all flashcards. A typical lesson must have a mix of EASY, MEDIUM, and HARD flashcards proportional to content complexity.
+- For each flashcard "difficulty": assign EASY for basic definitions any beginner understands after one read; MEDIUM for concepts requiring understanding of relationships or how a mechanism works in practice; HARD for concepts requiring deep understanding, involving multiple interrelated ideas, or likely to be confused with similar concepts. You MUST distribute difficulty realistically â€” do not assign MEDIUM to all flashcards. A typical lesson must have a mix of EASY, MEDIUM, and HARD flashcards proportional to content complexity.
 - Do NOT include literal newline characters inside JSON string values; use \\n for paragraph breaks
 - Return ONLY the JSON object, nothing else
 
@@ -295,7 +295,7 @@ Text content to teach from:
     return lesson
 
 
-# ─── Recap Video — Script Generation ─────────────────────────────────────────
+# â”€â”€â”€ Recap Video â€” Script Generation â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 def generate_video_script(
     lesson_title: str,
     real_world_hook: str,
@@ -311,7 +311,7 @@ def generate_video_script(
     lang_name = "French" if language.lower().startswith("fr") else "English"
     prompt = f"""You are writing a narration script for a short educational video about "{lesson_title}". The video has 4 slides. Write the narrator text for each slide in {lang_name}. The narrator speaks in a calm, clear, professor-like tone. Use simple academic language appropriate for university students.
 
-Slide 1 is about why this lesson matters in the real world. Base it on this hook: {real_world_hook}. Expand it into 3 sentences that explain the real-world importance naturally as if speaking to a student. Do not list facts — speak conversationally.
+Slide 1 is about why this lesson matters in the real world. Base it on this hook: {real_world_hook}. Expand it into 3 sentences that explain the real-world importance naturally as if speaking to a student. Do not list facts â€” speak conversationally.
 
 Slide 2 is about key concepts to remember. Base it on: {key_takeaway}. Write 3 to 4 sentences that introduce each key point conversationally, connecting them together naturally.
 
@@ -333,10 +333,10 @@ Return ONLY a valid JSON object with exactly 4 fields: slide1, slide2, slide3, s
         print(f"[generate_video_script] fallback due to: {e}")
         if language.lower().startswith("fr"):
             return {
-                "slide1": f"{real_world_hook} Ce concept joue un rôle fondamental dans de nombreuses technologies modernes que vous utilisez au quotidien.",
-                "slide2": f"{key_takeaway} Ces points essentiels forment la base de votre compréhension de ce sujet.",
-                "slide3": f"1. {practical_tip}\n2. Pratiquez avec un exemple concret sur votre machine.\n3. Comparez votre résultat avec la documentation officielle.",
-                "slide4": f"Prenez un moment pour réfléchir attentivement à cette question avant de passer au quiz. {challenge_question}",
+                "slide1": f"{real_world_hook} Ce concept joue un rÃ´le fondamental dans de nombreuses technologies modernes que vous utilisez au quotidien.",
+                "slide2": f"{key_takeaway} Ces points essentiels forment la base de votre comprÃ©hension de ce sujet.",
+                "slide3": f"1. {practical_tip}\n2. Pratiquez avec un exemple concret sur votre machine.\n3. Comparez votre rÃ©sultat avec la documentation officielle.",
+                "slide4": f"Prenez un moment pour rÃ©flÃ©chir attentivement Ã  cette question avant de passer au quiz. {challenge_question}",
             }
         else:
             return {
@@ -347,7 +347,7 @@ Return ONLY a valid JSON object with exactly 4 fields: slide1, slide2, slide3, s
             }
 
 
-# ─── Recap Video — ElevenLabs Audio Generation ───────────────────────────────
+# â”€â”€â”€ Recap Video â€” ElevenLabs Audio Generation â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 def generate_slide_audio(
     slide_text: str,
     language: str,
@@ -364,7 +364,7 @@ def generate_slide_audio(
     )
 
     def _silent_fallback() -> tuple[str, list]:
-        """Write 20 s of silent MP3 using a minimal WAV→MP3 trick via numpy."""
+        """Write 20 s of silent MP3 using a minimal WAVâ†’MP3 trick via numpy."""
         # Write a 20-second silent WAV, convert via moviepy/ffmpeg
         try:
             import wave, struct
@@ -376,7 +376,7 @@ def generate_slide_audio(
                 wf.setsampwidth(2)
                 wf.setframerate(sample_rate)
                 wf.writeframes(struct.pack("<" + "h" * num_samples, *([0] * num_samples)))
-            # Convert WAV → MP3 with ffmpeg (moviepy bundles it)
+            # Convert WAV â†’ MP3 with ffmpeg (moviepy bundles it)
             from moviepy import AudioFileClip as AFC
             afc = AFC(silent_wav)
             afc.write_audiofile(mp3_path, logger=None)
@@ -389,7 +389,7 @@ def generate_slide_audio(
         return mp3_path, []
 
     if not ELEVENLABS_API_KEY:
-        print(f"[generate_slide_audio] ELEVENLABS_API_KEY not set — using silent fallback")
+        print(f"[generate_slide_audio] ELEVENLABS_API_KEY not set â€” using silent fallback")
         return _silent_fallback()
 
     voice_id = ELEVENLABS_VOICE_FR if language.lower().startswith("fr") else ELEVENLABS_VOICE_EN
@@ -464,7 +464,7 @@ def generate_slide_audio(
         return _silent_fallback()
 
 
-# ─── Recap Video — Audio Duration Helper ─────────────────────────────────────
+# â”€â”€â”€ Recap Video â€” Audio Duration Helper â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 def _audio_duration_seconds(mp3_path: str) -> float:
     """Return duration of an MP3 file in seconds using mutagen, or estimate from file size."""
     try:
@@ -474,13 +474,13 @@ def _audio_duration_seconds(mp3_path: str) -> float:
         pass
     try:
         size = os.path.getsize(mp3_path)
-        # Rough estimate: 128 kbps → ~16000 bytes/sec
+        # Rough estimate: 128 kbps â†’ ~16000 bytes/sec
         return max(1.0, size / 16000)
     except Exception:
         return 10.0
 
 
-# ─── Recap Video Generation ────────────────────────────────────────────────────
+# â”€â”€â”€ Recap Video Generation â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 def generate_recap_video(
     lesson_number: int,
     lesson_title: str,
@@ -498,12 +498,12 @@ def generate_recap_video(
     try:
         is_fr = (language or "").lower().startswith("fr")
 
-        # ── Content generation (Groq) ──────────────────────────────────────────
+        # â”€â”€ Content generation (Groq) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         try:
             hook_prompt = (
-                f"Donne 2 à 3 phrases expliquant des applications du monde réel où \"{lesson_title}\" est utilisé. "
+                f"Donne 2 Ã  3 phrases expliquant des applications du monde rÃ©el oÃ¹ \"{lesson_title}\" est utilisÃ©. "
                 f"Pour chaque application mentionne une app ou technologie bien connue et explique comment ce concept s'y applique. "
-                f"Maximum 50 mots au total. Réponds en français."
+                f"Maximum 50 mots au total. RÃ©ponds en franÃ§ais."
                 if is_fr else
                 f"Give 2 to 3 sentences explaining real-world applications where \"{lesson_title}\" is used. "
                 f"For each application mention a specific well-known app or technology and explain how this concept applies to it. "
@@ -512,15 +512,15 @@ def generate_recap_video(
             real_world_hook = groq_chat(hook_prompt, temperature=0.7, max_tokens=200).strip()
         except Exception:
             real_world_hook = (
-                "Ce concept est utilisé dans de nombreuses applications modernes comme les bases de données et les frameworks web."
+                "Ce concept est utilisÃ© dans de nombreuses applications modernes comme les bases de donnÃ©es et les frameworks web."
                 if is_fr else
                 "This concept is used in modern applications like databases and web frameworks."
             )
 
         try:
             takeaway_prompt = (
-                f"Liste exactement 3 points clés qu'un étudiant doit retenir d'une leçon sur \"{lesson_title}\". "
-                f"Format : 3 courtes affirmations commençant chacune par un tiret. Maximum 12 mots par point. Réponds en français."
+                f"Liste exactement 3 points clÃ©s qu'un Ã©tudiant doit retenir d'une leÃ§on sur \"{lesson_title}\". "
+                f"Format : 3 courtes affirmations commenÃ§ant chacune par un tiret. Maximum 12 mots par point. RÃ©ponds en franÃ§ais."
                 if is_fr else
                 f"List exactly 3 key points a student must remember from a lesson about \"{lesson_title}\". "
                 f"Format as 3 short statements each starting with a dash character. Each point maximum 12 words. Respond in English."
@@ -528,17 +528,17 @@ def generate_recap_video(
             key_takeaway = groq_chat(takeaway_prompt, temperature=0.7, max_tokens=200).strip()
         except Exception:
             key_takeaway = (
-                "- Maîtrisez les concepts fondamentaux avant d'avancer.\n- Pratiquez régulièrement avec des exemples concrets.\n- Reliez ce concept aux notions déjà apprises."
+                "- MaÃ®trisez les concepts fondamentaux avant d'avancer.\n- Pratiquez rÃ©guliÃ¨rement avec des exemples concrets.\n- Reliez ce concept aux notions dÃ©jÃ  apprises."
                 if is_fr else
                 "- Master the fundamentals before moving forward.\n- Practice regularly with concrete examples.\n- Connect this concept to what you already know."
             )
 
         try:
             tip_prompt = (
-                f"Donne exactement 3 étapes pratiques concrètes pour quelqu'un qui apprend \"{lesson_title}\". "
-                f"Chaque étape doit mentionner un outil, une méthode ou une technologie spécifique. "
-                f"Retourne exactement 3 lignes formatées strictement comme '1. [étape]' retour à la ligne '2. [étape]' retour à la ligne '3. [étape]'. "
-                f"Maximum 18 mots par étape. Réponds en français. Retourne uniquement les 3 lignes sans texte supplémentaire."
+                f"Donne exactement 3 Ã©tapes pratiques concrÃ¨tes pour quelqu'un qui apprend \"{lesson_title}\". "
+                f"Chaque Ã©tape doit mentionner un outil, une mÃ©thode ou une technologie spÃ©cifique. "
+                f"Retourne exactement 3 lignes formatÃ©es strictement comme '1. [Ã©tape]' retour Ã  la ligne '2. [Ã©tape]' retour Ã  la ligne '3. [Ã©tape]'. "
+                f"Maximum 18 mots par Ã©tape. RÃ©ponds en franÃ§ais. Retourne uniquement les 3 lignes sans texte supplÃ©mentaire."
                 if is_fr else
                 f"Give exactly 3 concrete practical steps for someone learning about \"{lesson_title}\". "
                 f"Each step must mention a specific tool, method, or technology. "
@@ -548,15 +548,15 @@ def generate_recap_video(
             practical_tip = groq_chat(tip_prompt, temperature=0.7, max_tokens=200).strip()
         except Exception:
             practical_tip = (
-                "1. Lisez le résumé et identifiez les concepts clés.\n2. Créez un exemple simple.\n3. Expliquez le concept à voix haute."
+                "1. Lisez le rÃ©sumÃ© et identifiez les concepts clÃ©s.\n2. CrÃ©ez un exemple simple.\n3. Expliquez le concept Ã  voix haute."
                 if is_fr else
                 "1. Read the summary and identify the key concepts.\n2. Build a simple example.\n3. Explain the concept out loud."
             )
 
         try:
             challenge_prompt = (
-                f"Formule une question de réflexion ouverte sur \"{lesson_title}\" pour préparer un étudiant à un quiz. "
-                f"La question doit tester la compréhension profonde, pas la mémorisation. Maximum 25 mots. Réponds en français."
+                f"Formule une question de rÃ©flexion ouverte sur \"{lesson_title}\" pour prÃ©parer un Ã©tudiant Ã  un quiz. "
+                f"La question doit tester la comprÃ©hension profonde, pas la mÃ©morisation. Maximum 25 mots. RÃ©ponds en franÃ§ais."
                 if is_fr else
                 f"Write one open-ended thinking question about \"{lesson_title}\" to prepare a student for a quiz. "
                 f"The question should test deep understanding, not memorisation. Maximum 25 words. Respond in English."
@@ -564,12 +564,12 @@ def generate_recap_video(
             challenge_question = groq_chat(challenge_prompt, temperature=0.7, max_tokens=100).strip()
         except Exception:
             challenge_question = (
-                f"Comment appliqueriez-vous les concepts de \"{lesson_title}\" pour résoudre un problème concret ?"
+                f"Comment appliqueriez-vous les concepts de \"{lesson_title}\" pour rÃ©soudre un problÃ¨me concret ?"
                 if is_fr else
                 f"How would you apply the concepts of \"{lesson_title}\" to solve a real-world problem?"
             )
 
-        # ── Narration scripts (Groq) ───────────────────────────────────────────
+        # â”€â”€ Narration scripts (Groq) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         scripts = generate_video_script(
             lesson_title=lesson_title,
             real_world_hook=real_world_hook,
@@ -579,7 +579,7 @@ def generate_recap_video(
             language=language,
         )
 
-        # ── Slide configurations ───────────────────────────────────────────────
+        # â”€â”€ Slide configurations â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         GOLD_HEX   = "#f59e0b"
         INDIGO_HEX = "#6366f1"
 
@@ -590,7 +590,7 @@ def generate_recap_video(
                 "script":     scripts["slide1"],
             },
             {
-                "title":      "À retenir" if is_fr else "Key Takeaway",
+                "title":      "Ã€ retenir" if is_fr else "Key Takeaway",
                 "accentColor": INDIGO_HEX,
                 "script":     scripts["slide2"],
             },
@@ -600,13 +600,13 @@ def generate_recap_video(
                 "script":     scripts["slide3"],
             },
             {
-                "title":      "Défi avant le quiz" if is_fr else "Challenge before the quiz",
+                "title":      "DÃ©fi avant le quiz" if is_fr else "Challenge before the quiz",
                 "accentColor": "#a78bfa",
                 "script":     scripts["slide4"],
             },
         ]
 
-        # ── Generate audio for all 4 slides ───────────────────────────────────
+        # â”€â”€ Generate audio for all 4 slides â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         slide_audio_data = []
         for i, cfg in enumerate(slide_configs):
             slide_num = i + 1
@@ -623,7 +623,7 @@ def generate_recap_video(
                 "audioDurationSeconds": duration,
             })
 
-        # ── Build VideoData JSON for Remotion ─────────────────────────────────
+        # â”€â”€ Build VideoData JSON for Remotion â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         video_data = {
             "lessonTitle":     lesson_title,
             "language":        "fr" if is_fr else "en",
@@ -656,12 +656,12 @@ def generate_recap_video(
         with open(json_path, "w", encoding="utf-8") as jf:
             json.dump(video_data, jf, ensure_ascii=False, indent=2)
 
-        # ── Call Remotion renderer ─────────────────────────────────────────────
+        # â”€â”€ Call Remotion renderer â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         import subprocess
         project_dir = os.path.abspath(os.path.dirname(__file__))
         render_script = os.path.join(project_dir, "remotion-renderer", "render.mjs")
 
-        print(f"[generate_recap_video] calling Remotion renderer → {out}")
+        print(f"[generate_recap_video] calling Remotion renderer â†’ {out}")
         result = subprocess.run(
             ["node", render_script, "--data", json_path, "--output", out],
             cwd=project_dir,
@@ -677,7 +677,7 @@ def generate_recap_video(
 
         print(result.stdout)
 
-        # ── Cleanup ────────────────────────────────────────────────────────────
+        # â”€â”€ Cleanup â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         try:
             os.remove(json_path)
         except Exception:
@@ -688,7 +688,7 @@ def generate_recap_video(
             except Exception:
                 pass
 
-        print(f"[generate_recap_video] done — {os.path.getsize(out):,} bytes")
+        print(f"[generate_recap_video] done â€” {os.path.getsize(out):,} bytes")
         return out
 
     except Exception as exc:
@@ -698,14 +698,14 @@ def generate_recap_video(
 
 
 
-# ─── On-demand Quiz Generation ──────────────────────────────────────────────────
+# â”€â”€â”€ On-demand Quiz Generation â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 def generate_quiz_questions(lesson_content: str, previous_questions: list[str] = []) -> list:
     """Generate exactly 5 fresh quiz questions from lesson content using high-temperature sampling."""
     exclusion_block = ""
     if previous_questions:
         formatted = "\n".join(f"  - {q}" for q in previous_questions)
         exclusion_block = f"""
-FORBIDDEN QUESTIONS — these questions were already used in previous attempts. You MUST NOT generate any question that is similar in meaning, structure, or topic to any of the following:
+FORBIDDEN QUESTIONS â€” these questions were already used in previous attempts. You MUST NOT generate any question that is similar in meaning, structure, or topic to any of the following:
 {formatted}
 
 If you repeat or closely paraphrase any of these, it is a critical failure.
@@ -713,21 +713,21 @@ If you repeat or closely paraphrase any of these, it is a critical failure.
 
     prompt = f"""You are a quiz generator for an e-learning platform. Your task is to generate exactly 5 quiz questions based on the lesson content provided.
 {exclusion_block}
-CRITICAL INSTRUCTION — ANGLE OF APPROACH:
+CRITICAL INSTRUCTION â€” ANGLE OF APPROACH:
 Every time you are called you must approach the lesson from a completely different angle.
-Do NOT generate questions about the most obvious or prominent concepts — instead pick less obvious facts, edge cases, nuances, or relationships between concepts that a student might overlook or take for granted.
+Do NOT generate questions about the most obvious or prominent concepts â€” instead pick less obvious facts, edge cases, nuances, or relationships between concepts that a student might overlook or take for granted.
 Force the student to think deeply, not just recall headline facts.
 
 LANGUAGE RULE: Detect the language of the lesson content and write ALL questions, options, answers, and explanations in that SAME language. If content is in French, respond in French. If in English, respond in English.
 
 Generate EXACTLY 5 questions in this order and distribution:
-- Questions 1–2: questionType "TRUE_FALSE", difficulty "EASY"
+- Questions 1â€“2: questionType "TRUE_FALSE", difficulty "EASY"
   * options must be exactly ["Vrai", "Faux"] if content is in French, or ["True", "False"] if in English
   * correctAnswer must be exactly one of the two option values
-  * Write ORIGINAL statements in your own words — NEVER copy a sentence from the lesson and flip one word
+  * Write ORIGINAL statements in your own words â€” NEVER copy a sentence from the lesson and flip one word
   * Test conceptual understanding, not surface-level recall of wording
-- Questions 3–4: questionType "MCQ", difficulty "MEDIUM"
-  * Exactly 4 options — all plausible, wrong ones are related to the topic and wrong for a specific reason
+- Questions 3â€“4: questionType "MCQ", difficulty "MEDIUM"
+  * Exactly 4 options â€” all plausible, wrong ones are related to the topic and wrong for a specific reason
   * correctAnswer must exactly match one of the 4 options
   * Require reasoning: compare concepts, identify correct use case/context, apply concept to scenario, or identify a consequence/implication
   * NEVER ask a question whose answer is a single isolated fact that can be read directly from one sentence
@@ -735,7 +735,7 @@ Generate EXACTLY 5 questions in this order and distribution:
   * options must be an empty array []
   * question text MUST contain "____" as the blank placeholder
   * correctAnswer is the exact word or short phrase that fills the blank
-  * Target a key technical term that requires genuine understanding — NOT a term that appears verbatim in an almost identical sentence in the lesson
+  * Target a key technical term that requires genuine understanding â€” NOT a term that appears verbatim in an almost identical sentence in the lesson
   * Construct the sentence around the concept, not around a sentence already in the lesson
 
 Return ONLY a valid JSON array of exactly 5 question objects. No markdown, no code fences, no text outside the JSON array.
@@ -783,14 +783,14 @@ class GenerateLessonRecapRequest(BaseModel):
     language: str  # "fr" or "en"
 
 
-# ─── On-demand Exam Generation ──────────────────────────────────────────────────
+# â”€â”€â”€ On-demand Exam Generation â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 def generate_exam_questions(lesson_contents: list[str], course_title: str) -> list:
     """
     Generate 75 exam questions via 4 separate Groq calls:
-      Section 1 — 30 TRUE_FALSE  EASY      (1 pt each)   → 1 call
-      Section 2 — 30 MCQ         MEDIUM    (2 pts each)  → 2 calls of 15
-      Section 3 — 15 FILL_BLANK  HARD      (3 pts each)  → 1 call
-    Returns a flat list of ≥75 question dicts.
+      Section 1 â€” 30 TRUE_FALSE  EASY      (1 pt each)   â†’ 1 call
+      Section 2 â€” 30 MCQ         MEDIUM    (2 pts each)  â†’ 2 calls of 15
+      Section 3 â€” 15 FILL_BLANK  HARD      (3 pts each)  â†’ 1 call
+    Returns a flat list of â‰¥75 question dicts.
     """
     combined_content = "\n\n---\n\n".join(lesson_contents)
     content_preview = combined_content[:10000]  # keep well within token budget
@@ -820,7 +820,7 @@ def generate_exam_questions(lesson_contents: list[str], course_title: str) -> li
 
     base_rules = f"""LANGUAGE RULE: Detect the language of the content and write ALL questions, answers, and explanations in that SAME language.
 QUALITY RULES:
-- NEVER copy a sentence directly from the content — rephrase and test understanding
+- NEVER copy a sentence directly from the content â€” rephrase and test understanding
 - Test conceptual understanding, real-world application, or relationships between concepts
 - No duplicate questions
 - Every correctAnswer must be unambiguous and defensible
@@ -829,7 +829,7 @@ Course title: {course_title}
 Course content (all lessons combined):
 {content_preview}"""
 
-    # ── Section 1: TRUE_FALSE (30 questions, 1 call) ──────────────────────────
+    # â”€â”€ Section 1: TRUE_FALSE (30 questions, 1 call) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     tf_prompt = f"""You are an expert exam question writer for a university e-learning platform.
 
 {base_rules}
@@ -847,7 +847,7 @@ Return ONLY a valid JSON array of exactly 30 objects with these fields:
 
 No markdown, no code fences, ONLY the JSON array."""
 
-    # ── Section 2a: MCQ first 15 ──────────────────────────────────────────────
+    # â”€â”€ Section 2a: MCQ first 15 â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     mcq_prompt_a = f"""You are an expert exam question writer for a university e-learning platform.
 
 {base_rules}
@@ -857,34 +857,34 @@ Generate EXACTLY 15 MCQ questions, difficulty MEDIUM, sectionNumber 2.
 Rules:
 - Exactly 4 options, all plausible
 - correctAnswer must exactly match one of the 4 option values
-- Test reasoning: comparisons, application, consequences — not isolated facts
-- Keep explanations concise (1–2 sentences)
+- Test reasoning: comparisons, application, consequences â€” not isolated facts
+- Keep explanations concise (1â€“2 sentences)
 
 Return ONLY a valid JSON array of exactly 15 objects with these fields:
 {{"questionType":"MCQ","questionText":"...","option1":"...","option2":"...","option3":"...","option4":"...","correctAnswer":"...","explanation":"...","difficulty":"MEDIUM","sectionNumber":2,"pointsWorth":2}}
 
 No markdown, no code fences, ONLY the JSON array."""
 
-    # ── Section 2b: MCQ next 15 ───────────────────────────────────────────────
+    # â”€â”€ Section 2b: MCQ next 15 â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     mcq_prompt_b = f"""You are an expert exam question writer for a university e-learning platform.
 
 {base_rules}
 
 Generate EXACTLY 15 MORE MCQ questions, difficulty MEDIUM, sectionNumber 2.
-These must be DIFFERENT from any questions already generated — cover different concepts and aspects of the course.
+These must be DIFFERENT from any questions already generated â€” cover different concepts and aspects of the course.
 
 Rules:
 - Exactly 4 options, all plausible
 - correctAnswer must exactly match one of the 4 option values
-- Test reasoning: comparisons, application, consequences — not isolated facts
-- Keep explanations concise (1–2 sentences)
+- Test reasoning: comparisons, application, consequences â€” not isolated facts
+- Keep explanations concise (1â€“2 sentences)
 
 Return ONLY a valid JSON array of exactly 15 objects with these fields:
 {{"questionType":"MCQ","questionText":"...","option1":"...","option2":"...","option3":"...","option4":"...","correctAnswer":"...","explanation":"...","difficulty":"MEDIUM","sectionNumber":2,"pointsWorth":2}}
 
 No markdown, no code fences, ONLY the JSON array."""
 
-    # ── Section 3: FILL_BLANK (15 questions, 1 call) ─────────────────────────
+    # â”€â”€ Section 3: FILL_BLANK (15 questions, 1 call) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     fb_prompt = f"""You are an expert exam question writer for a university e-learning platform.
 
 {base_rules}
@@ -896,7 +896,7 @@ Rules:
 - option1, option2, option3, option4 must ALL be null
 - correctAnswer is the exact word or short phrase that fills the blank
 - Target key technical terms that require deep understanding
-- Keep explanations concise (1–2 sentences)
+- Keep explanations concise (1â€“2 sentences)
 
 Return ONLY a valid JSON array of exactly 15 objects with these fields:
 {{"questionType":"FILL_BLANK","questionText":"The ____ is responsible for...","option1":null,"option2":null,"option3":null,"option4":null,"correctAnswer":"exact answer","explanation":"...","difficulty":"HARD","sectionNumber":3,"pointsWorth":3}}
@@ -930,7 +930,7 @@ No markdown, no code fences, ONLY the JSON array."""
             raise RuntimeError(f"Exam generation failed after retry: {retry_err}")
 
 
-# ─── Endpoints ──────────────────────────────────────────────────────────────────
+# â”€â”€â”€ Endpoints â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 @app.get("/health")
 def health_check():
     return {"status": "ok", "service": "learnai-ai-service", "model": MODEL}
@@ -994,7 +994,7 @@ async def generate_lesson_recap_endpoint(request: GenerateLessonRecapRequest):
         raise HTTPException(status_code=502, detail=f"Video generation failed: {str(e)}")
 
 
-# ─── Certificate generation ──────────────────────────────────────────────────
+# â”€â”€â”€ Certificate generation â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 class CertificateRequest(BaseModel):
     certificateUuid: str
@@ -1021,7 +1021,7 @@ def generate_certificate_html(
 
     return f"""<!DOCTYPE html><html><body>
     <h1>Certificate of Achievement</h1>
-    <p>{student_name} — {course_title} — Score: {score}% — {date_str}</p>
+    <p>{student_name} â€” {course_title} â€” Score: {score}% â€” {date_str}</p>
     </body></html>"""
 
 
@@ -1032,165 +1032,251 @@ def generate_certificate_pdf(
     score: int,
     issued_at: str,
 ) -> str:
-    """Generate a styled A4-landscape PDF certificate using ReportLab."""
+
     from reportlab.pdfgen import canvas
     from reportlab.lib.pagesizes import A4, landscape
     from reportlab.lib import colors
     from reportlab.lib.units import mm
     from reportlab.pdfbase import pdfmetrics
     from reportlab.pdfbase.ttfonts import TTFont
+    import os, re
+    from datetime import datetime
 
+    # -- Output path -------------------------------
+    output_path = f"/tmp/certificate_{certificate_uuid}.pdf"
+    page_width, page_height = landscape(A4)
+    c = canvas.Canvas(output_path,
+                      pagesize=landscape(A4))
+
+    # -- Parse date --------------------------------
     try:
-        from datetime import datetime
-        dt = datetime.fromisoformat(issued_at.replace("Z", "+00:00"))
+        dt = datetime.fromisoformat(
+            issued_at.replace("Z", "+00:00"))
         date_str = dt.strftime("%B %d, %Y")
     except Exception:
-        date_str = issued_at[:10]
+        date_str = str(issued_at)[:10]
 
-    pdf_path = os.path.join("uploads", "certificates", f"certificate_{certificate_uuid}.pdf")
-    page_w, page_h = landscape(A4)   # 842 x 595 pt
+    # -- Color palette -----------------------------
+    dark_bg      = colors.HexColor("#0D0F1A")
+    dark_card    = colors.HexColor("#12152A")
+    purple       = colors.HexColor("#6366F1")
+    purple_light = colors.HexColor("#818CF8")
+    gold         = colors.HexColor("#F59E0B")
+    gold_light   = colors.HexColor("#FCD34D")
+    white        = colors.HexColor("#F8FAFC")
+    grey         = colors.HexColor("#94A3B8")
+    dark_grey    = colors.HexColor("#334155")
 
-    c = canvas.Canvas(pdf_path, pagesize=landscape(A4))
+    # -- Background --------------------------------
+    c.setFillColor(dark_bg)
+    c.rect(0, 0, page_width, page_height,
+           fill=1, stroke=0)
 
-    # ── Background ────────────────────────────────────────────────────────────
-    c.setFillColor(colors.HexColor("#FFFDF5"))
-    c.rect(0, 0, page_w, page_h, fill=1, stroke=0)
-
-    # ── Outer border (navy) ───────────────────────────────────────────────────
-    c.setStrokeColor(colors.HexColor("#1A3A6B"))
-    c.setLineWidth(5)
-    margin = 18
-    c.rect(margin, margin, page_w - 2*margin, page_h - 2*margin, fill=0, stroke=1)
-
-    # ── Inner border (gold) ───────────────────────────────────────────────────
-    c.setStrokeColor(colors.HexColor("#C9A84C"))
-    c.setLineWidth(1.5)
-    inner = margin + 10
-    c.rect(inner, inner, page_w - 2*inner, page_h - 2*inner, fill=0, stroke=1)
-
-    # ── Corner ornaments ──────────────────────────────────────────────────────
-    c.setStrokeColor(colors.HexColor("#C9A84C"))
+    # -- Outer decorative border -------------------
+    border_margin = 12 * mm
+    c.setStrokeColor(purple)
     c.setLineWidth(2)
-    orn = 28   # ornament arm length
+    c.rect(border_margin, border_margin,
+           page_width - 2 * border_margin,
+           page_height - 2 * border_margin,
+           fill=0, stroke=1)
+
+    # Inner gold border
+    inner_margin = 16 * mm
+    c.setStrokeColor(gold)
+    c.setLineWidth(0.5)
+    c.rect(inner_margin, inner_margin,
+           page_width - 2 * inner_margin,
+           page_height - 2 * inner_margin,
+           fill=0, stroke=1)
+
+    # -- Corner decorations ------------------------
+    corner_size = 8 * mm
     corners = [
-        (inner + 4, inner + 4),                          # BL
-        (page_w - inner - 4, inner + 4),                 # BR
-        (inner + 4, page_h - inner - 4),                 # TL
-        (page_w - inner - 4, page_h - inner - 4),        # TR
+        (inner_margin, inner_margin),
+        (page_width - inner_margin, inner_margin),
+        (inner_margin, page_height - inner_margin),
+        (page_width - inner_margin,
+         page_height - inner_margin),
     ]
+    c.setStrokeColor(gold)
+    c.setLineWidth(1.5)
     for cx, cy in corners:
-        # horizontal arm
-        dx = orn if cx < page_w / 2 else -orn
-        c.line(cx, cy, cx + dx, cy)
-        # vertical arm
-        dy = orn if cy < page_h / 2 else -orn
-        c.line(cx, cy, cx, cy + dy)
+        c.circle(cx, cy, 3 * mm, fill=0, stroke=1)
 
-    # ── Gold divider ──────────────────────────────────────────────────────────
-    c.setStrokeColor(colors.HexColor("#C9A84C"))
-    c.setLineWidth(1.2)
-    div_y = page_h - 105
-    c.line(page_w * 0.3, div_y, page_w * 0.7, div_y)
-
-    # ── Logo / platform name ──────────────────────────────────────────────────
-    c.setFillColor(colors.HexColor("#1A3A6B"))
+    # -- Header - Platform name --------------------
+    c.setFillColor(purple_light)
     c.setFont("Helvetica-Bold", 11)
-    c.drawCentredString(page_w / 2, page_h - 60, "✦  LEARNAI PLATFORM  ✦")
+    platform = "?  L E A R N A I  P L A T F O R M  ?"
+    c.drawCentredString(
+        page_width / 2,
+        page_height - 28 * mm,
+        platform)
 
-    # ── Headline ──────────────────────────────────────────────────────────────
-    c.setFont("Helvetica-Bold", 26)
-    c.setFillColor(colors.HexColor("#1A3A6B"))
-    c.drawCentredString(page_w / 2, page_h - 90, "CERTIFICATE OF ACHIEVEMENT")
+    # Divider line under platform name
+    c.setStrokeColor(purple)
+    c.setLineWidth(0.8)
+    c.line(inner_margin + 10 * mm,
+           page_height - 32 * mm,
+           page_width - inner_margin - 10 * mm,
+           page_height - 32 * mm)
 
-    # ── "This is to certify that" ─────────────────────────────────────────────
-    c.setFont("Helvetica", 12)
-    c.setFillColor(colors.HexColor("#555555"))
-    c.drawCentredString(page_w / 2, page_h - 125, "This is to certify that")
+    # -- Main title --------------------------------
+    c.setFillColor(white)
+    c.setFont("Helvetica-Bold", 28)
+    c.drawCentredString(
+        page_width / 2,
+        page_height - 48 * mm,
+        "CERTIFICATE OF ACHIEVEMENT")
 
-    # ── Student name ──────────────────────────────────────────────────────────
-    c.setFont("Helvetica-BoldOblique", 34)
-    c.setFillColor(colors.HexColor("#1A3A6B"))
-    c.drawCentredString(page_w / 2, page_h - 178, student_name)
-
-    # Underline beneath name
-    name_width = c.stringWidth(student_name, "Helvetica-BoldOblique", 34)
-    line_x1 = page_w / 2 - name_width / 2 - 10
-    line_x2 = page_w / 2 + name_width / 2 + 10
-    c.setStrokeColor(colors.HexColor("#C9A84C"))
+    # Gold underline for title
+    title_width = 180 * mm
+    c.setStrokeColor(gold)
     c.setLineWidth(1.2)
-    c.line(line_x1, page_h - 184, line_x2, page_h - 184)
+    c.line(page_width / 2 - title_width / 2,
+           page_height - 51 * mm,
+           page_width / 2 + title_width / 2,
+           page_height - 51 * mm)
 
-    # ── "has successfully completed" ──────────────────────────────────────────
-    c.setFont("Helvetica", 12)
-    c.setFillColor(colors.HexColor("#333333"))
-    c.drawCentredString(page_w / 2, page_h - 210, "has successfully completed the course")
+    # -- Subtitle ----------------------------------
+    c.setFillColor(grey)
+    c.setFont("Helvetica", 11)
+    c.drawCentredString(
+        page_width / 2,
+        page_height - 62 * mm,
+        "This is to certify that")
 
-    # ── Course title ──────────────────────────────────────────────────────────
-    c.setFont("Helvetica-Bold", 16)
-    c.setFillColor(colors.HexColor("#1A3A6B"))
-    # Truncate long titles
-    max_chars = 60
-    display_title = f"\u201c{course_title[:max_chars]}{'...' if len(course_title) > max_chars else ''}\u201d"
-    c.drawCentredString(page_w / 2, page_h - 238, display_title)
+    # -- Student name ------------------------------
+    c.setFillColor(gold_light)
+    c.setFont("Helvetica-Bold", 32)
+    c.drawCentredString(
+        page_width / 2,
+        page_height - 78 * mm,
+        student_name)
 
-    # ── Score badge ───────────────────────────────────────────────────────────
-    badge_w, badge_h = 110, 24
-    badge_x = page_w / 2 - badge_w / 2
-    badge_y = page_h - 278
-    c.setFillColor(colors.HexColor("#1A3A6B"))
-    c.roundRect(badge_x, badge_y, badge_w, badge_h, 12, fill=1, stroke=0)
-    c.setFillColor(colors.white)
-    c.setFont("Helvetica-Bold", 12)
-    c.drawCentredString(page_w / 2, badge_y + 7, f"Score: {score}%")
-
-    # ── Bottom gold divider ───────────────────────────────────────────────────
-    c.setStrokeColor(colors.HexColor("#C9A84C"))
+    # Name underline
+    name_width = c.stringWidth(
+        student_name, "Helvetica-Bold", 32)
+    c.setStrokeColor(gold)
     c.setLineWidth(1)
-    bottom_div_y = 95
-    c.line(page_w * 0.1, bottom_div_y, page_w * 0.9, bottom_div_y)
+    c.line(page_width / 2 - name_width / 2 - 5,
+           page_height - 81 * mm,
+           page_width / 2 + name_width / 2 + 5,
+           page_height - 81 * mm)
 
-    # ── Bottom 3-column section ───────────────────────────────────────────────
-    col_y_label = 75
-    col_y_value = 58
+    # -- Course label ------------------------------
+    c.setFillColor(grey)
+    c.setFont("Helvetica", 11)
+    c.drawCentredString(
+        page_width / 2,
+        page_height - 91 * mm,
+        "has successfully completed the course")
 
-    # Left: date
+    # -- Course title ------------------------------
+    max_chars = 55
+    if len(course_title) > max_chars:
+        display_title = (
+            '"' + course_title[:max_chars - 3]
+            + '..."')
+    else:
+        display_title = '"' + course_title + '"'
+
+    c.setFillColor(purple_light)
+    c.setFont("Helvetica-Bold", 16)
+    c.drawCentredString(
+        page_width / 2,
+        page_height - 103 * mm,
+        display_title)
+
+    # -- Score badge -------------------------------
+    badge_w = 40 * mm
+    badge_h = 10 * mm
+    badge_x = page_width / 2 - badge_w / 2
+    badge_y = page_height - 118 * mm
+
+    c.setFillColor(purple)
+    c.roundRect(badge_x, badge_y,
+                badge_w, badge_h,
+                3 * mm, fill=1, stroke=0)
+
+    c.setFillColor(white)
+    c.setFont("Helvetica-Bold", 12)
+    c.drawCentredString(
+        page_width / 2,
+        badge_y + 3 * mm,
+        f"Score: {score}%")
+
+    # -- Bottom divider ----------------------------
+    divider_y = 38 * mm
+    c.setStrokeColor(dark_grey)
+    c.setLineWidth(0.5)
+    c.line(inner_margin + 10 * mm,
+           divider_y,
+           page_width - inner_margin - 10 * mm,
+           divider_y)
+
+    # -- Footer - 3 columns ------------------------
+    col1_x = page_width * 0.2
+    col2_x = page_width * 0.5
+    col3_x = page_width * 0.8
+    footer_label_y = 28 * mm
+    footer_value_y = 22 * mm
+
+    # Column labels
+    c.setFillColor(grey)
     c.setFont("Helvetica", 8)
-    c.setFillColor(colors.HexColor("#777777"))
-    c.drawCentredString(page_w * 0.22, col_y_label, "DATE ISSUED")
+    for label, x in [
+        ("DATE ISSUED", col1_x),
+        ("VERIFICATION ID", col2_x),
+        ("PLATFORM SEAL", col3_x),
+    ]:
+        c.drawCentredString(x, footer_label_y,
+                            label)
+
+    # Date value
+    c.setFillColor(white)
     c.setFont("Helvetica-Bold", 10)
-    c.setFillColor(colors.HexColor("#222222"))
-    c.drawCentredString(page_w * 0.22, col_y_value, date_str)
-    # Signature line
-    c.setStrokeColor(colors.HexColor("#999999"))
-    c.setLineWidth(0.8)
-    c.line(page_w * 0.22 - 50, col_y_label + 14, page_w * 0.22 + 50, col_y_label + 14)
+    c.drawCentredString(
+        col1_x, footer_value_y, date_str)
 
-    # Center: seal circle
-    seal_cx = page_w / 2
-    seal_cy = 68
-    c.setFillColor(colors.HexColor("#1A3A6B"))
-    c.circle(seal_cx, seal_cy, 26, fill=1, stroke=0)
-    c.setStrokeColor(colors.HexColor("#C9A84C"))
-    c.setLineWidth(2)
-    c.circle(seal_cx, seal_cy, 26, fill=0, stroke=1)
-    c.setFillColor(colors.HexColor("#C9A84C"))
-    c.setFont("Helvetica-Bold", 18)
-    c.drawCentredString(seal_cx, seal_cy - 6, "\u2605")
-
-    # Right: certificate ID
-    short_uuid = certificate_uuid[:18] + "…"
+    # Full UUID value (split into two lines
+    # if needed)
+    uuid_line1 = certificate_uuid[:36]
+    c.setFillColor(purple_light)
     c.setFont("Helvetica", 8)
-    c.setFillColor(colors.HexColor("#777777"))
-    c.drawCentredString(page_w * 0.78, col_y_label, "CERTIFICATE ID")
-    c.setFont("Helvetica-Bold", 8)
-    c.setFillColor(colors.HexColor("#222222"))
-    c.drawCentredString(page_w * 0.78, col_y_value, short_uuid)
-    c.setStrokeColor(colors.HexColor("#999999"))
-    c.setLineWidth(0.8)
-    c.line(page_w * 0.78 - 50, col_y_label + 14, page_w * 0.78 + 50, col_y_label + 14)
+    c.drawCentredString(
+        col2_x, footer_value_y + 3 * mm,
+        uuid_line1)
+
+    # Platform seal - decorative circle
+    seal_x = col3_x
+    seal_y = footer_value_y + 2 * mm
+    c.setFillColor(purple)
+    c.circle(seal_x, seal_y,
+             7 * mm, fill=1, stroke=0)
+    c.setStrokeColor(gold)
+    c.setLineWidth(1)
+    c.circle(seal_x, seal_y,
+             7 * mm, fill=0, stroke=1)
+    c.setFillColor(white)
+    c.setFont("Helvetica-Bold", 7)
+    c.drawCentredString(seal_x, seal_y + 1, "?")
+    c.setFont("Helvetica", 5)
+    c.drawCentredString(
+        seal_x, seal_y - 3, "VERIFIED")
+
+    # -- Subtle background glow effect -------------
+    # Purple glow top center
+    c.setFillColor(
+        colors.HexColor("#6366F1"))
+    c.setFillAlpha(0.04)
+    c.circle(page_width / 2,
+             page_height - 10 * mm,
+             80 * mm, fill=1, stroke=0)
+    c.setFillAlpha(1)
 
     c.save()
-    return pdf_path
+    return output_path
 
 
 @app.post("/api/generate-certificate")
@@ -1221,7 +1307,7 @@ async def process_document(
     file: UploadFile = File(...),
     fileType: str    = Query(..., description="PDF | DOCX | PPTX | IMAGE"),
 ):
-    # ── Validate file type ──────────────────────────────────────────────────────
+    # â”€â”€ Validate file type â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     file_type = fileType.upper()
     if file_type not in SUPPORTED_FILE_TYPES:
         raise HTTPException(
@@ -1229,12 +1315,12 @@ async def process_document(
             detail=f"Unsupported file type '{fileType}'. Supported: {', '.join(SUPPORTED_FILE_TYPES)}",
         )
 
-    # ── Read file bytes ─────────────────────────────────────────────────────────
+    # â”€â”€ Read file bytes â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     file_bytes = await file.read()
     if not file_bytes:
         raise HTTPException(status_code=400, detail="Uploaded file is empty or unreadable.")
 
-    # ── Extract text ────────────────────────────────────────────────────────────
+    # â”€â”€ Extract text â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     print(f"[1/4] Extracting text from {file_type} file: {file.filename}")
     try:
         text = extract_text(file_bytes, file_type, file.filename or "")
@@ -1249,19 +1335,19 @@ async def process_document(
         )
     print(f"    Extracted {len(text)} characters of text.")
 
-    # ── Chunk text ──────────────────────────────────────────────────────────────
+    # â”€â”€ Chunk text â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     chunks = split_into_chunks(text)
     print(f"[2/4] Split into {len(chunks)} chunk(s) (max {MAX_CHUNKS}, ~{CHUNK_WORD_SIZE} words each).")
 
-    # ── Category detection ───────────────────────────────────────────────────────
+    # â”€â”€ Category detection â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     print("[3/4] Detecting document category...")
     try:
         category = detect_category(text)
     except Exception as e:
-        category = "Général"
+        category = "GÃ©nÃ©ral"
     print(f"    Category: \"{category}\"")
 
-    # ── Course title ────────────────────────────────────────────────────────────
+    # â”€â”€ Course title â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     print("[4/4] Generating course title...")
     try:
         course_title = generate_course_title(text)
@@ -1269,13 +1355,13 @@ async def process_document(
         raise HTTPException(status_code=502, detail=f"Groq API error (title): {str(e)}")
     print(f"    Title: \"{course_title}\"")
 
-    # ── Course description ───────────────────────────────────────────────────────
+    # â”€â”€ Course description â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     try:
         course_description = generate_course_description(text)
     except Exception:
         course_description = ""
 
-    # ── Lessons ─────────────────────────────────────────────────────────────────
+    # â”€â”€ Lessons â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     lessons = []
     previous_titles: list[str] = []
     print(f"[5/5] Generating {len(chunks)} lesson(s)...")
@@ -1302,17 +1388,17 @@ async def process_document(
         "totalLessons":      len(lessons),
         "lessons":           lessons,
     }
-    print(f"Done. Course \"{course_title}\" — category: \"{category}\" — {len(lessons)} lesson(s).")
+    print(f"Done. Course \"{course_title}\" â€” category: \"{category}\" â€” {len(lessons)} lesson(s).")
     return result
 
 
-# ─── Entry point ────────────────────────────────────────────────────────────────
+# â”€â”€â”€ Entry point â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
 
 
-# ─── Chatbot ─────────────────────────────────────────────────────────────────────
+# â”€â”€â”€ Chatbot â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 class ChatMessage(BaseModel):
     role: str
@@ -1378,3 +1464,5 @@ with their learning questions."""
         raise HTTPException(status_code=502, detail=f"Chat generation failed: {str(e)}")
 
     return {"reply": reply}
+
+

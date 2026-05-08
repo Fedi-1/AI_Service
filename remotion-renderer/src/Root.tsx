@@ -1,5 +1,6 @@
+// C:\Users\firas\Desktop\PFE Project\learnai-ai-service\remotion-renderer\src\Root.tsx
 import React from "react";
-import { AbsoluteFill, Easing, interpolate, Sequence, useCurrentFrame, useVideoConfig } from "remotion";
+import { AbsoluteFill, Sequence, interpolate, useCurrentFrame } from "remotion";
 import { VideoData } from "./types";
 import Slide1WhyItMatters from "./components/Slide1WhyItMatters";
 import Slide2KeyConcepts from "./components/Slide2KeyConcepts";
@@ -10,53 +11,62 @@ export const TRANSITION_FRAMES = 20;
 
 interface SlideWrapperProps {
   children: React.ReactNode;
-  /** frame offset relative to this slide's Sequence start */
   localFrame: number;
   totalFrames: number;
+  slideIndex: number;
+  totalSlides: number;
+  lessonTitle: string;
+  accentColor: string;
 }
 
-/** Applies zoom-out-then-in cross-slide transition */
-const SlideWrapper: React.FC<SlideWrapperProps> = ({ children, localFrame, totalFrames }) => {
+const SlideWrapper: React.FC<SlideWrapperProps> = ({
+  children,
+  localFrame,
+  totalFrames,
+  slideIndex,
+  totalSlides,
+  lessonTitle,
+  accentColor,
+}) => {
   const outStart = totalFrames - TRANSITION_FRAMES;
 
-  // Incoming: frames 0 → TRANSITION_FRAMES : scale 1.15→1.0, opacity 0→1
-  const inScale = interpolate(localFrame, [0, TRANSITION_FRAMES], [1.15, 1.0], {
+  const inScale = interpolate(localFrame, [0, TRANSITION_FRAMES], [0.95, 1], {
     extrapolateLeft: "clamp",
     extrapolateRight: "clamp",
-    easing: Easing.out(Easing.quad),
   });
   const inOpacity = interpolate(localFrame, [0, TRANSITION_FRAMES], [0, 1], {
     extrapolateLeft: "clamp",
     extrapolateRight: "clamp",
-    easing: Easing.out(Easing.quad),
   });
 
-  // Outgoing: frames outStart → totalFrames : scale 1.0→0.85, opacity 1→0
-  const outScale = interpolate(localFrame, [outStart, totalFrames], [1.0, 0.85], {
+  const outScale = interpolate(localFrame, [outStart, totalFrames], [1, 0.95], {
     extrapolateLeft: "clamp",
     extrapolateRight: "clamp",
-    easing: Easing.in(Easing.quad),
   });
   const outOpacity = interpolate(localFrame, [outStart, totalFrames], [1, 0], {
     extrapolateLeft: "clamp",
     extrapolateRight: "clamp",
-    easing: Easing.in(Easing.quad),
   });
 
-  // Combine: during transition-in window use in*, during transition-out use out*
   const isTransitioningIn = localFrame < TRANSITION_FRAMES;
   const isTransitioningOut = localFrame >= outStart;
 
-  let scale = 1.0;
-  let opacity = 1.0;
+  const scale = isTransitioningIn ? inScale : isTransitioningOut ? outScale : 1;
+  const opacity = isTransitioningIn ? inOpacity : isTransitioningOut ? outOpacity : 1;
 
-  if (isTransitioningIn) {
-    scale = inScale;
-    opacity = inOpacity;
-  } else if (isTransitioningOut) {
-    scale = outScale;
-    opacity = outOpacity;
-  }
+  const safeLessonTitle = lessonTitle.length > 30 ? `${lessonTitle.slice(0, 30)}...` : lessonTitle;
+  const badgeOpacity = interpolate(localFrame, [10, 20], [0, 1], {
+    extrapolateLeft: "clamp",
+    extrapolateRight: "clamp",
+  });
+  const counterOpacity = interpolate(localFrame, [5, 15], [0, 1], {
+    extrapolateLeft: "clamp",
+    extrapolateRight: "clamp",
+  });
+  const progressWidth = interpolate(localFrame, [0, totalFrames], [0, 100], {
+    extrapolateLeft: "clamp",
+    extrapolateRight: "clamp",
+  });
 
   return (
     <div
@@ -66,32 +76,82 @@ const SlideWrapper: React.FC<SlideWrapperProps> = ({ children, localFrame, total
         overflow: "hidden",
         transform: `scale(${scale})`,
         opacity,
+        position: "relative",
       }}
     >
       {children}
+
+      <div
+        style={{
+          position: "absolute",
+          top: 20,
+          right: 20,
+          padding: "8px 10px",
+          borderRadius: 8,
+          backgroundColor: "rgba(0,0,0,0.4)",
+          fontFamily: "Inter, system-ui, sans-serif",
+          fontSize: 12,
+          color: "#94a3b8",
+          opacity: badgeOpacity,
+          pointerEvents: "none",
+        }}
+      >
+        {safeLessonTitle}
+      </div>
+
+      <div
+        style={{
+          position: "absolute",
+          right: 20,
+          bottom: 16,
+          fontFamily: "Inter, system-ui, sans-serif",
+          fontSize: 14,
+          color: "#94a3b8",
+          opacity: counterOpacity,
+          pointerEvents: "none",
+        }}
+      >
+        {slideIndex + 1} / {totalSlides}
+      </div>
+
+      <div
+        style={{
+          position: "absolute",
+          left: 0,
+          right: 0,
+          bottom: 0,
+          height: 3,
+          backgroundColor: "rgba(255,255,255,0.1)",
+          pointerEvents: "none",
+        }}
+      >
+        <div
+          style={{
+            width: `${progressWidth}%`,
+            height: "100%",
+            backgroundColor: accentColor,
+          }}
+        />
+      </div>
     </div>
   );
 };
 
 export const Root: React.FC<{ videoData: VideoData }> = ({ videoData }) => {
-  const { fps } = useVideoConfig();
   const frame = useCurrentFrame();
 
   const slides = videoData.slides;
 
-  // Duration for each slide in frames
   const slideDurations = slides.map(
     (s) => Math.ceil(s.audioDurationSeconds * 30) + TRANSITION_FRAMES
   );
 
-  // Compute start frame for each slide (overlap by TRANSITION_FRAMES)
   const slideStarts: number[] = [];
   let cursor = 0;
   for (let i = 0; i < slides.length; i++) {
     slideStarts.push(cursor);
     cursor += slideDurations[i] - TRANSITION_FRAMES;
   }
-  // Last slide has no outgoing overlap, add TRANSITION_FRAMES back
   cursor += TRANSITION_FRAMES;
 
   const slideComponents = [
@@ -138,6 +198,10 @@ export const Root: React.FC<{ videoData: VideoData }> = ({ videoData }) => {
             <SlideWrapper
               localFrame={frame - startFrame}
               totalFrames={duration}
+              slideIndex={i}
+              totalSlides={slides.length}
+              lessonTitle={videoData.lessonTitle}
+              accentColor={slide.accentColor}
             >
               {renderSlide(frame - startFrame, slide)}
             </SlideWrapper>
