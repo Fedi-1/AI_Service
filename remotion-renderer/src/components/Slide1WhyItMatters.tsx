@@ -1,14 +1,13 @@
-// C:\Users\firas\Desktop\PFE Project\learnai-ai-service\remotion-renderer\src\components\Slide1WhyItMatters.tsx
 import React from "react";
-import {
-  Audio,
-  interpolate,
-  interpolateColors,
-  spring,
-  useCurrentFrame,
-  useVideoConfig,
-} from "remotion";
 import { SlideData } from "../types";
+import {
+  CinematicStage,
+  extractKeywords,
+  GlassPanel,
+  phraseLabel,
+  repairText,
+  splitIntoPoints,
+} from "./CinematicElements";
 
 interface Slide1Props {
   slide: SlideData;
@@ -17,241 +16,143 @@ interface Slide1Props {
 }
 
 const Slide1WhyItMatters: React.FC<Slide1Props> = ({ slide, currentTimeSeconds }) => {
-  const frame = useCurrentFrame();
-  const { fps } = useVideoConfig();
-  const slideDurationInFrames = Math.max(1, Math.ceil(slide.audioDurationSeconds * 30) + 20);
-
-  const bgGradient = interpolateColors(
-    frame,
-    [0, Math.floor(slideDurationInFrames / 2), slideDurationInFrames],
-    ["#0D0F1A", "#111827", "#0F172A"]
+  const points = splitIntoPoints(slide.script, 3).filter((point) => repairText(point).trim());
+  const lessonLabels = points.map((point, index) =>
+    phraseLabel(point, ["Key idea", "Context", "Application"][index])
   );
-
-  const particle1X = interpolate(frame, [0, slideDurationInFrames], [-50, 80], {
-    extrapolateRight: "clamp",
-  });
-  const particle1Y = interpolate(frame, [0, slideDurationInFrames], [100, -50], {
-    extrapolateRight: "clamp",
-  });
-
-  const particle2X = interpolate(frame, [0, slideDurationInFrames], [920, 780], {
-    extrapolateRight: "clamp",
-  });
-  const particle2Y = interpolate(frame, [0, slideDurationInFrames], [-90, 50], {
-    extrapolateRight: "clamp",
-  });
-
-  const particle3X = interpolate(frame, [0, slideDurationInFrames], [200, 340], {
-    extrapolateRight: "clamp",
-  });
-  const particle3Y = interpolate(frame, [0, slideDurationInFrames], [620, 480], {
-    extrapolateRight: "clamp",
-  });
-
-  const particle4X = interpolate(frame, [0, slideDurationInFrames], [1040, 900], {
-    extrapolateRight: "clamp",
-  });
-  const particle4Y = interpolate(frame, [0, slideDurationInFrames], [560, 400], {
-    extrapolateRight: "clamp",
-  });
-
-  const slideEnterSpring = spring({
-    frame,
-    fps,
-    config: { damping: 18, stiffness: 80 },
-  });
-  const slideTranslateY = interpolate(slideEnterSpring, [0, 1], [60, 0]);
-  const slideOpacity = interpolate(frame, [0, 12], [0, 1], {
-    extrapolateLeft: "clamp",
-    extrapolateRight: "clamp",
-  });
-
-  const titleWords = slide.title.trim().split(/\s+/);
-  const lineWidth = interpolate(frame, [8, 20], [0, 300], {
-    extrapolateRight: "clamp",
-  });
+  const keywords = extractKeywords(slide.script, 9);
+  const displayedKeywords = keywords.length > 0 ? keywords : lessonLabels;
 
   return (
-    <div
-      style={{
-        width: 1280,
-        height: 720,
-        overflow: "hidden",
-        fontFamily: "Inter, system-ui, sans-serif",
-        position: "relative",
-      }}
+    <CinematicStage
+      slide={slide}
+      currentTimeSeconds={currentTimeSeconds}
+      sceneLabel="Lesson analysis"
     >
-      <div
-        style={{
-          position: "absolute",
-          inset: 0,
-          background: `radial-gradient(circle at 20% 20%, rgba(255,255,255,0.05), transparent 45%), ${bgGradient}`,
-        }}
-      />
-
-      <div
-        style={{
-          position: "absolute",
-          left: particle1X,
-          top: particle1Y,
-          width: 200,
-          height: 200,
-          borderRadius: "50%",
-          backgroundColor: slide.accentColor,
-          opacity: 0.12,
-        }}
-      />
-      <div
-        style={{
-          position: "absolute",
-          left: particle2X,
-          top: particle2Y,
-          width: 300,
-          height: 300,
-          borderRadius: "50%",
-          backgroundColor: "#60a5fa",
-          opacity: 0.1,
-        }}
-      />
-      <div
-        style={{
-          position: "absolute",
-          left: particle3X,
-          top: particle3Y,
-          width: 150,
-          height: 150,
-          borderRadius: "50%",
-          backgroundColor: "#f8fafc",
-          opacity: 0.08,
-        }}
-      />
-      <div
-        style={{
-          position: "absolute",
-          left: particle4X,
-          top: particle4Y,
-          width: 250,
-          height: 250,
-          borderRadius: "50%",
-          backgroundColor: slide.accentColor,
-          opacity: 0.09,
-        }}
-      />
-
-      <div
-        style={{
-          padding: "60px 80px",
-          display: "flex",
-          flexDirection: "column",
-          justifyContent: "center",
-          height: "100%",
-          transform: `translateY(${slideTranslateY}px)`,
-          opacity: slideOpacity,
-          position: "relative",
-          zIndex: 2,
-        }}
-      >
-        <div style={{ textAlign: "left" }}>
-          <h1
+      <GlassPanel x={100} y={154} width={270} height={394} delay={8} accentColor={slide.accentColor}>
+        <div style={{ padding: 22 }}>
+          <div style={{ color: "#cbd5e1", fontSize: 13, fontWeight: 800 }}>KEY TERMS</div>
+          <div
             style={{
-              margin: 0,
-              fontSize: 68,
-              fontWeight: 800,
-              lineHeight: 1.1,
-              letterSpacing: -1,
-              color: "#ffffff",
-              textShadow: `0 0 26px ${slide.accentColor}`,
+              marginTop: 20,
+              minHeight: 246,
+              borderRadius: 8,
+              backgroundColor: "rgba(248,250,252,0.06)",
+              border: "1px solid rgba(255,255,255,0.12)",
+              padding: 16,
+              display: "flex",
+              flexWrap: "wrap",
+              alignContent: "flex-start",
+              gap: 10,
             }}
           >
-            {titleWords.map((word, idx) => {
-              const wordFrame = Math.max(0, frame - idx * 4);
-              const wordSpring = spring({
-                frame: wordFrame,
-                fps,
-                config: { damping: 14, stiffness: 180 },
-              });
-              const wordScale = interpolate(wordSpring, [0, 1], [0.7, 1]);
-              const wordOpacity = interpolate(wordFrame, [0, 10], [0, 1], {
-                extrapolateLeft: "clamp",
-                extrapolateRight: "clamp",
-              });
-
-              return (
-                <span
-                  key={`${word}-${idx}`}
-                  style={{
-                    display: "inline-block",
-                    marginRight: 14,
-                    transform: `scale(${wordScale})`,
-                    opacity: wordOpacity,
-                    transformOrigin: "left bottom",
-                  }}
-                >
-                  {word}
-                </span>
-              );
-            })}
-          </h1>
-
+            {displayedKeywords.map((keyword, index) => (
+              <div
+                key={`${keyword}-${index}`}
+                style={{
+                  borderRadius: 8,
+                  border: `1px solid ${index < 3 ? slide.accentColor : "rgba(255,255,255,0.14)"}`,
+                  backgroundColor: index < 3 ? `${slide.accentColor}1c` : "rgba(255,255,255,0.06)",
+                  color: index < 3 ? "#f8fafc" : "#cbd5e1",
+                  padding: "8px 10px",
+                  fontSize: 13,
+                  lineHeight: 1.1,
+                  fontWeight: 800,
+                }}
+              >
+                {keyword}
+              </div>
+            ))}
+          </div>
           <div
             style={{
               marginTop: 18,
-              width: lineWidth,
-              height: 3,
-              borderRadius: 2,
-              backgroundColor: slide.accentColor,
+              color: "#94a3b8",
+              fontSize: 13,
+              lineHeight: 1.35,
+              fontWeight: 700,
             }}
-          />
+          >
+            {points.length} connected ideas detected from this lesson.
+          </div>
         </div>
+      </GlassPanel>
 
-        <div
-          style={{
-            marginTop: 38,
-            alignSelf: "center",
-            maxWidth: 800,
-            lineHeight: 1.8,
-            fontSize: 28,
-            textAlign: "center",
-          }}
-        >
-          {slide.words.map((w, idx) => {
-            const isPast = currentTimeSeconds >= w.end;
-            const isSpeaking = currentTimeSeconds >= w.start && currentTimeSeconds < w.end;
+      <GlassPanel x={400} y={104} width={780} height={500} delay={18} accentColor={slide.accentColor}>
+        <div style={{ padding: 24 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <div>
+              <div style={{ color: "#f8fafc", fontSize: 24, fontWeight: 850 }}>Lesson map</div>
+              <div style={{ marginTop: 6, color: "#94a3b8", fontSize: 14 }}>
+                {repairText(slide.title)}
+              </div>
+            </div>
+            <div
+              style={{
+                color: "#08111f",
+                backgroundColor: slide.accentColor,
+                borderRadius: 8,
+                padding: "9px 12px",
+                fontSize: 13,
+                fontWeight: 850,
+              }}
+            >
+              ANALYZING
+            </div>
+          </div>
 
-            const wordStartFrame = Math.max(0, Math.floor(w.start * fps));
-            const bounce = spring({
-              frame: Math.max(0, frame - wordStartFrame),
-              fps,
-              config: { damping: 12, stiffness: 200 },
-            });
-            const bounceScale = interpolate(bounce, [0, 1], [0.95, 1]);
-            const speakingScale = isSpeaking ? 1.08 : 1;
-
-            const color = isSpeaking ? slide.accentColor : isPast ? "#ffffff" : "#475569";
-            const opacity = isSpeaking ? 1 : isPast ? 0.7 : 0.5;
-
-            return (
-              <span
-                key={`${w.word}-${idx}`}
-                style={{
-                  display: "inline-block",
-                  marginRight: 8,
-                  color,
-                  opacity,
-                  fontWeight: isSpeaking ? 700 : 500,
-                  transform: `scale(${bounceScale * speakingScale})`,
-                  textShadow: isSpeaking ? `0 0 20px ${slide.accentColor}CC` : "none",
-                }}
-              >
-                {w.word}
-              </span>
-            );
-          })}
+          <div style={{ display: "flex", flexDirection: "column", gap: 13, marginTop: 24 }}>
+            {lessonLabels.map((label, index) => {
+              const paragraph = repairText(points[index] || "");
+              const paragraphSize = paragraph.length > 230 ? 13.5 : paragraph.length > 160 ? 14.5 : 15.5;
+              return (
+                <div
+                  key={`${label}-${index}`}
+                  style={{
+                    minHeight: 112,
+                    borderRadius: 8,
+                    border: "1px solid rgba(255,255,255,0.12)",
+                    backgroundColor: "rgba(255,255,255,0.052)",
+                    padding: "14px 16px",
+                  }}
+                >
+                  <div style={{ display: "flex", alignItems: "center", gap: 11, color: "#cbd5e1" }}>
+                    <div
+                      style={{
+                        width: 28,
+                        height: 28,
+                        borderRadius: 8,
+                        backgroundColor: slide.accentColor,
+                        color: "#08111f",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        fontSize: 14,
+                        fontWeight: 900,
+                      }}
+                    >
+                      {index + 1}
+                    </div>
+                    <span style={{ fontSize: 14, color: slide.accentColor, fontWeight: 900 }}>{label}</span>
+                  </div>
+                  <div
+                    style={{
+                      marginTop: 9,
+                      color: "#f8fafc",
+                      fontSize: paragraphSize,
+                      lineHeight: 1.28,
+                      fontWeight: 680,
+                    }}
+                  >
+                    {paragraph}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
         </div>
-      </div>
-
-      {slide.audioFilePath ? <Audio src={slide.audioFilePath} /> : null}
-    </div>
+      </GlassPanel>
+    </CinematicStage>
   );
 };
 

@@ -12,7 +12,7 @@
 
 import { bundle } from "@remotion/bundler";
 import { renderMedia, selectComposition } from "@remotion/renderer";
-import { readFileSync, writeFileSync, existsSync, mkdirSync } from "fs";
+import { readFileSync, writeFileSync, existsSync, mkdirSync, readdirSync, statSync } from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
 import { createHash } from "crypto";
@@ -72,8 +72,38 @@ const entryPoint = path.join(__dirname, "src", "index.tsx");
 const cacheDir = path.join(__dirname, ".remotion-bundle-cache");
 const cacheMetaFile = path.join(cacheDir, "bundle-meta.json");
 
+function collectSourceFiles(dir) {
+  const entries = readdirSync(dir).sort();
+  const files = [];
+
+  for (const entry of entries) {
+    const fullPath = path.join(dir, entry);
+    const stat = statSync(fullPath);
+    if (stat.isDirectory()) {
+      files.push(...collectSourceFiles(fullPath));
+    } else if (/\.(ts|tsx|js|jsx|json)$/.test(entry)) {
+      files.push(fullPath);
+    }
+  }
+
+  return files;
+}
+
 function getBundleCacheKey() {
-  return createHash("md5").update(entryPoint).digest("hex");
+  const hash = createHash("md5");
+  const sourceFiles = collectSourceFiles(path.join(__dirname, "src"));
+  const dependencyFiles = ["package.json", "package-lock.json", "tsconfig.json"]
+    .map((file) => path.join(__dirname, file))
+    .filter((file) => existsSync(file));
+
+  for (const file of [...sourceFiles, ...dependencyFiles]) {
+    hash.update(path.relative(__dirname, file));
+    hash.update("\0");
+    hash.update(readFileSync(file));
+    hash.update("\0");
+  }
+
+  return hash.digest("hex");
 }
 
 function readBundleCache() {

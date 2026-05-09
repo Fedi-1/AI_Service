@@ -1,296 +1,167 @@
-// C:\Users\firas\Desktop\PFE Project\learnai-ai-service\remotion-renderer\src\components\Slide2KeyConcepts.tsx
 import React from "react";
-import {
-  Audio,
-  interpolate,
-  interpolateColors,
-  spring,
-  useCurrentFrame,
-  useVideoConfig,
-} from "remotion";
+import { interpolate, spring, useCurrentFrame, useVideoConfig } from "remotion";
 import { SlideData } from "../types";
+import {
+  CinematicStage,
+  DataStream,
+  GlassPanel,
+  splitIntoPoints,
+} from "./CinematicElements";
 
 interface Slide2Props {
   slide: SlideData;
   currentTimeSeconds: number;
 }
 
-function parsePoints(script: string): string[] {
-  const parts = script
-    .split(/\n\s*-\s*|^-\s*/m)
-    .map((p) => p.trim())
-    .filter(Boolean);
-  if (parts.length >= 2) return parts.slice(0, 3);
+const nodePositions = [
+  { x: 128, y: 192 },
+  { x: 840, y: 170 },
+  { x: 808, y: 420 },
+];
 
-  const lines = script
-    .split(/\n/)
-    .map((l) => l.trim())
-    .filter(Boolean);
-  if (lines.length >= 2) return lines.slice(0, 3);
-
-  return [script.trim()];
-}
-
-const Slide2KeyConcepts: React.FC<Slide2Props> = ({ slide }) => {
+const Slide2KeyConcepts: React.FC<Slide2Props> = ({ slide, currentTimeSeconds }) => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
-  const slideDurationInFrames = Math.max(1, Math.ceil(slide.audioDurationSeconds * 30) + 20);
-
-  const bgGradient = interpolateColors(
-    frame,
-    [0, Math.floor(slideDurationInFrames / 2), slideDurationInFrames],
-    ["#0F1117", "#111827", "#0b1220"]
-  );
-
-  const particle1X = interpolate(frame, [0, slideDurationInFrames], [-50, 70], {
-    extrapolateRight: "clamp",
-  });
-  const particle1Y = interpolate(frame, [0, slideDurationInFrames], [120, -40], {
-    extrapolateRight: "clamp",
-  });
-  const particle2X = interpolate(frame, [0, slideDurationInFrames], [960, 820], {
-    extrapolateRight: "clamp",
-  });
-  const particle2Y = interpolate(frame, [0, slideDurationInFrames], [-70, 60], {
-    extrapolateRight: "clamp",
-  });
-  const particle3X = interpolate(frame, [0, slideDurationInFrames], [180, 320], {
-    extrapolateRight: "clamp",
-  });
-  const particle3Y = interpolate(frame, [0, slideDurationInFrames], [610, 470], {
-    extrapolateRight: "clamp",
-  });
-  const particle4X = interpolate(frame, [0, slideDurationInFrames], [1020, 890], {
-    extrapolateRight: "clamp",
-  });
-  const particle4Y = interpolate(frame, [0, slideDurationInFrames], [570, 420], {
-    extrapolateRight: "clamp",
-  });
-
-  const slideEnterSpring = spring({
-    frame,
-    fps,
-    config: { damping: 18, stiffness: 80 },
-  });
-  const slideTranslateY = interpolate(slideEnterSpring, [0, 1], [60, 0]);
-  const slideOpacity = interpolate(frame, [0, 12], [0, 1], {
+  const points = splitIntoPoints(slide.script, 3);
+  const corePulse = interpolate(frame % 54, [0, 27, 54], [1, 1.08, 1], {
     extrapolateLeft: "clamp",
     extrapolateRight: "clamp",
   });
-
-  const titleWords = slide.title.trim().split(/\s+/);
-  const lineWidth = interpolate(frame, [8, 20], [0, 300], {
-    extrapolateRight: "clamp",
-  });
-
-  const points = parsePoints(slide.script).slice(0, 3);
+  const orbit = frame * 1.2;
 
   return (
-    <div
-      style={{
-        width: 1280,
-        height: 720,
-        overflow: "hidden",
-        fontFamily: "Inter, system-ui, sans-serif",
-        position: "relative",
-      }}
+    <CinematicStage
+      slide={slide}
+      currentTimeSeconds={currentTimeSeconds}
+      sceneLabel="Concepts"
     >
-      <div
-        style={{
-          position: "absolute",
-          inset: 0,
-          background: `radial-gradient(circle at 15% 25%, rgba(255,255,255,0.04), transparent 45%), ${bgGradient}`,
-        }}
-      />
+      {nodePositions.map((pos, index) => (
+        <DataStream
+          key={index}
+          from={[640, 360]}
+          to={[pos.x + 175, pos.y + 88]}
+          delay={16 + index * 13}
+          accentColor={index === 1 ? "#38bdf8" : slide.accentColor}
+        />
+      ))}
 
       <div
         style={{
           position: "absolute",
-          left: particle1X,
-          top: particle1Y,
-          width: 200,
-          height: 200,
+          left: 536,
+          top: 256,
+          width: 208,
+          height: 208,
           borderRadius: "50%",
-          backgroundColor: slide.accentColor,
-          opacity: 0.11,
-        }}
-      />
-      <div
-        style={{
-          position: "absolute",
-          left: particle2X,
-          top: particle2Y,
-          width: 300,
-          height: 300,
-          borderRadius: "50%",
-          backgroundColor: "#93c5fd",
-          opacity: 0.09,
-        }}
-      />
-      <div
-        style={{
-          position: "absolute",
-          left: particle3X,
-          top: particle3Y,
-          width: 150,
-          height: 150,
-          borderRadius: "50%",
-          backgroundColor: "#f8fafc",
-          opacity: 0.08,
-        }}
-      />
-      <div
-        style={{
-          position: "absolute",
-          left: particle4X,
-          top: particle4Y,
-          width: 250,
-          height: 250,
-          borderRadius: "50%",
-          backgroundColor: slide.accentColor,
-          opacity: 0.1,
-        }}
-      />
-
-      <div
-        style={{
-          padding: "60px 80px",
-          display: "flex",
-          flexDirection: "column",
-          justifyContent: "center",
-          height: "100%",
-          transform: `translateY(${slideTranslateY}px)`,
-          opacity: slideOpacity,
-          position: "relative",
-          zIndex: 2,
+          border: `2px solid ${slide.accentColor}`,
+          backgroundColor: "rgba(15,23,42,0.82)",
+          boxShadow: `0 0 70px ${slide.accentColor}44`,
+          transform: `scale(${corePulse})`,
         }}
       >
-        <div style={{ textAlign: "left" }}>
-          <h1
-            style={{
-              margin: 0,
-              fontSize: 68,
-              fontWeight: 800,
-              lineHeight: 1.1,
-              letterSpacing: -1,
-              color: "#ffffff",
-              textShadow: `0 0 26px ${slide.accentColor}`,
-            }}
-          >
-            {titleWords.map((word, idx) => {
-              const wordFrame = Math.max(0, frame - idx * 4);
-              const wordSpring = spring({
-                frame: wordFrame,
-                fps,
-                config: { damping: 14, stiffness: 180 },
-              });
-              const wordScale = interpolate(wordSpring, [0, 1], [0.7, 1]);
-              const wordOpacity = interpolate(wordFrame, [0, 10], [0, 1], {
-                extrapolateLeft: "clamp",
-                extrapolateRight: "clamp",
-              });
-
-              return (
-                <span
-                  key={`${word}-${idx}`}
-                  style={{
-                    display: "inline-block",
-                    marginRight: 14,
-                    transform: `scale(${wordScale})`,
-                    opacity: wordOpacity,
-                    transformOrigin: "left bottom",
-                  }}
-                >
-                  {word}
-                </span>
-              );
-            })}
-          </h1>
-
+        {[0, 1, 2].map((ring) => (
           <div
+            key={ring}
             style={{
-              marginTop: 18,
-              width: lineWidth,
-              height: 3,
-              borderRadius: 2,
-              backgroundColor: slide.accentColor,
+              position: "absolute",
+              inset: 20 + ring * 28,
+              borderRadius: "50%",
+              border: "1px solid rgba(255,255,255,0.13)",
+              transform: `rotate(${orbit + ring * 34}deg)`,
             }}
           />
-        </div>
-
+        ))}
         <div
           style={{
-            marginTop: 34,
+            position: "absolute",
+            inset: 0,
             display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
             flexDirection: "column",
-            gap: 18,
-            maxWidth: 920,
           }}
         >
-          {points.map((point, idx) => {
-            const startFrame = 26 + idx * 15;
-            const entrySpring = spring({
-              frame: Math.max(0, frame - startFrame),
-              fps,
-              config: { damping: 14, stiffness: 160 },
-            });
-            const translateX = interpolate(entrySpring, [0, 1], [-40, 0]);
-            const opacity = interpolate(frame, [startFrame, startFrame + 12], [0, 1], {
-              extrapolateLeft: "clamp",
-              extrapolateRight: "clamp",
-            });
+          <div style={{ color: "#f8fafc", fontSize: 30, fontWeight: 900 }}>Concepts</div>
+        </div>
+      </div>
 
-            const dotScale = spring({
-              frame: Math.max(0, frame - startFrame),
-              fps,
-              config: { damping: 12, stiffness: 220 },
-            });
-            const dotPulse = interpolate(dotScale, [0, 1], [0, 1]);
+      {points.map((point, index) => {
+        const pos = nodePositions[index];
+        const delay = 24 + index * 18;
+        const enter = spring({
+          frame: Math.max(0, frame - delay),
+          fps,
+          config: { damping: 17, stiffness: 150 },
+        });
+        const lift = interpolate(enter, [0, 1], [28, 0]);
+        const opacity = interpolate(frame, [delay, delay + 12], [0, 1], {
+          extrapolateLeft: "clamp",
+          extrapolateRight: "clamp",
+        });
+        const active = currentTimeSeconds > index * Math.max(1.2, slide.audioDurationSeconds / 4);
+        const textSize = point.length > 180 ? 15 : point.length > 120 ? 16 : 18;
 
-            return (
+        return (
+          <GlassPanel
+            key={index}
+            x={pos.x}
+            y={pos.y}
+            width={360}
+            height={180}
+            delay={delay}
+            accentColor={index === 1 ? "#38bdf8" : slide.accentColor}
+          >
+            <div
+              style={{
+                padding: 20,
+                height: "100%",
+                transform: `translateY(${lift}px)`,
+                opacity,
+              }}
+            >
               <div
-                key={`${point}-${idx}`}
                 style={{
-                  transform: `translateX(${translateX}px)`,
-                  opacity,
-                  borderLeft: `3px solid ${slide.accentColor}`,
-                  backgroundColor: "rgba(255,255,255,0.03)",
-                  borderRadius: 12,
-                  padding: "16px 18px",
                   display: "flex",
-                  alignItems: "flex-start",
-                  gap: 14,
+                  alignItems: "center",
+                  gap: 11,
+                  color: active ? slide.accentColor : "#94a3b8",
+                  fontSize: 13,
+                  fontWeight: 900,
                 }}
               >
                 <div
                   style={{
-                    width: 12,
-                    height: 12,
-                    borderRadius: "50%",
-                    backgroundColor: slide.accentColor,
-                    transform: `scale(${dotPulse})`,
-                    marginTop: 10,
-                    flexShrink: 0,
-                  }}
-                />
-                <div
-                  style={{
-                    fontSize: 24,
-                    color: "#ffffff",
-                    lineHeight: 1.6,
-                    fontWeight: 500,
+                    width: 28,
+                    height: 28,
+                    borderRadius: 8,
+                    backgroundColor: active ? slide.accentColor : "rgba(255,255,255,0.1)",
+                    color: active ? "#08111f" : "#cbd5e1",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    fontWeight: 900,
                   }}
                 >
-                  {point}
+                  {index + 1}
                 </div>
+                CONCEPT {index + 1}
               </div>
-            );
-          })}
-        </div>
-      </div>
-
-      {slide.audioFilePath ? <Audio src={slide.audioFilePath} /> : null}
-    </div>
+              <div
+                style={{
+                  marginTop: 14,
+                  color: "#f8fafc",
+                  fontSize: textSize,
+                  lineHeight: 1.28,
+                  fontWeight: 780,
+                }}
+              >
+                {point}
+              </div>
+            </div>
+          </GlassPanel>
+        );
+      })}
+    </CinematicStage>
   );
 };
 

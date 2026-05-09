@@ -1,336 +1,124 @@
-// C:\Users\firas\Desktop\PFE Project\learnai-ai-service\remotion-renderer\src\components\Slide3InPractice.tsx
 import React from "react";
-import {
-  Audio,
-  interpolate,
-  interpolateColors,
-  spring,
-  useCurrentFrame,
-  useVideoConfig,
-} from "remotion";
+import { interpolate, spring, useCurrentFrame, useVideoConfig } from "remotion";
 import { SlideData } from "../types";
+import {
+  CinematicStage,
+  GlassPanel,
+  repairText,
+  splitIntoPoints,
+} from "./CinematicElements";
 
 interface Slide3Props {
   slide: SlideData;
   currentTimeSeconds: number;
 }
 
-function parseSteps(script: string): string[] {
-  const lines = script
-    .split("\n")
-    .map((l) => l.trim())
-    .filter(Boolean);
-
-  const numbered = lines
-    .filter((l) => /^\d+[.)]\s+/.test(l))
-    .map((l) => l.replace(/^\d+[.)]\s+/, "").trim());
-  if (numbered.length >= 3) return numbered.slice(0, 3);
-
-  if (lines.length >= 3) return lines.slice(0, 3);
-
-  const sentences = script
-    .split(/[.!?]+/)
-    .map((s) => s.trim())
-    .filter(Boolean);
-  if (sentences.length >= 3) {
-    const chunk = Math.ceil(sentences.length / 3);
-    return [
-      `${sentences.slice(0, chunk).join(". ")}.`,
-      `${sentences.slice(chunk, chunk * 2).join(". ")}.`,
-      `${sentences.slice(chunk * 2).join(". ")}.`,
-    ];
-  }
-
-  const result = numbered.length > 0 ? [...numbered] : [script.trim()];
-  while (result.length < 3) result.push("");
-  return result.slice(0, 3);
-}
-
-const Slide3InPractice: React.FC<Slide3Props> = ({ slide }) => {
+const Slide3InPractice: React.FC<Slide3Props> = ({ slide, currentTimeSeconds }) => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
-  const slideDurationInFrames = Math.max(1, Math.ceil(slide.audioDurationSeconds * 30) + 20);
-
-  const bgGradient = interpolateColors(
-    frame,
-    [0, Math.floor(slideDurationInFrames / 2), slideDurationInFrames],
-    ["#0A0C16", "#111827", "#0b1020"]
+  const steps = splitIntoPoints(slide.script, 3).filter((step) => repairText(step).trim());
+  const activeStep = Math.min(
+    Math.max(0, steps.length - 1),
+    Math.floor(currentTimeSeconds / Math.max(1, slide.audioDurationSeconds / Math.max(1, steps.length)))
   );
 
-  const particle1X = interpolate(frame, [0, slideDurationInFrames], [-50, 70], {
-    extrapolateRight: "clamp",
-  });
-  const particle1Y = interpolate(frame, [0, slideDurationInFrames], [110, -50], {
-    extrapolateRight: "clamp",
-  });
-  const particle2X = interpolate(frame, [0, slideDurationInFrames], [930, 790], {
-    extrapolateRight: "clamp",
-  });
-  const particle2Y = interpolate(frame, [0, slideDurationInFrames], [-80, 70], {
-    extrapolateRight: "clamp",
-  });
-  const particle3X = interpolate(frame, [0, slideDurationInFrames], [210, 350], {
-    extrapolateRight: "clamp",
-  });
-  const particle3Y = interpolate(frame, [0, slideDurationInFrames], [620, 490], {
-    extrapolateRight: "clamp",
-  });
-  const particle4X = interpolate(frame, [0, slideDurationInFrames], [1030, 900], {
-    extrapolateRight: "clamp",
-  });
-  const particle4Y = interpolate(frame, [0, slideDurationInFrames], [550, 420], {
-    extrapolateRight: "clamp",
-  });
-
-  const slideEnterSpring = spring({
-    frame,
-    fps,
-    config: { damping: 18, stiffness: 80 },
-  });
-  const slideTranslateY = interpolate(slideEnterSpring, [0, 1], [60, 0]);
-  const slideOpacity = interpolate(frame, [0, 12], [0, 1], {
-    extrapolateLeft: "clamp",
-    extrapolateRight: "clamp",
-  });
-
-  const titleWords = slide.title.trim().split(/\s+/);
-  const lineWidth = interpolate(frame, [8, 20], [0, 300], {
-    extrapolateRight: "clamp",
-  });
-
-  const steps = parseSteps(slide.script);
-
   return (
-    <div
-      style={{
-        width: 1280,
-        height: 720,
-        overflow: "hidden",
-        fontFamily: "Inter, system-ui, sans-serif",
-        position: "relative",
-      }}
+    <CinematicStage
+      slide={slide}
+      currentTimeSeconds={currentTimeSeconds}
+      sceneLabel="Application"
     >
-      <div
-        style={{
-          position: "absolute",
-          inset: 0,
-          background: `radial-gradient(circle at 18% 20%, rgba(255,255,255,0.04), transparent 45%), ${bgGradient}`,
-        }}
-      />
+      <GlassPanel x={88} y={102} width={1010} height={500} delay={12} accentColor={slide.accentColor}>
+        <div style={{ padding: 22 }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+            <div>
+              <div style={{ color: "#f8fafc", fontSize: 25, fontWeight: 900 }}>
+                {repairText(slide.title)}
+              </div>
+              <div style={{ color: "#94a3b8", marginTop: 6, fontSize: 14 }}>
+                Actions de la lecon
+              </div>
+            </div>
+            <div
+              style={{
+                width: 110,
+                height: 32,
+                borderRadius: 8,
+                border: `1px solid ${slide.accentColor}`,
+                color: slide.accentColor,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                fontSize: 13,
+                fontWeight: 900,
+              }}
+            >
+              PRACTICE
+            </div>
+          </div>
 
-      <div
-        style={{
-          position: "absolute",
-          left: particle1X,
-          top: particle1Y,
-          width: 200,
-          height: 200,
-          borderRadius: "50%",
-          backgroundColor: slide.accentColor,
-          opacity: 0.12,
-        }}
-      />
-      <div
-        style={{
-          position: "absolute",
-          left: particle2X,
-          top: particle2Y,
-          width: 300,
-          height: 300,
-          borderRadius: "50%",
-          backgroundColor: "#7dd3fc",
-          opacity: 0.09,
-        }}
-      />
-      <div
-        style={{
-          position: "absolute",
-          left: particle3X,
-          top: particle3Y,
-          width: 150,
-          height: 150,
-          borderRadius: "50%",
-          backgroundColor: "#f8fafc",
-          opacity: 0.08,
-        }}
-      />
-      <div
-        style={{
-          position: "absolute",
-          left: particle4X,
-          top: particle4Y,
-          width: 250,
-          height: 250,
-          borderRadius: "50%",
-          backgroundColor: slide.accentColor,
-          opacity: 0.1,
-        }}
-      />
-
-      <div
-        style={{
-          padding: "60px 80px",
-          display: "flex",
-          flexDirection: "column",
-          justifyContent: "center",
-          height: "100%",
-          transform: `translateY(${slideTranslateY}px)`,
-          opacity: slideOpacity,
-          position: "relative",
-          zIndex: 2,
-        }}
-      >
-        <div style={{ textAlign: "left" }}>
-          <h1
-            style={{
-              margin: 0,
-              fontSize: 68,
-              fontWeight: 800,
-              lineHeight: 1.1,
-              letterSpacing: -1,
-              color: "#ffffff",
-              textShadow: `0 0 26px ${slide.accentColor}`,
-            }}
-          >
-            {titleWords.map((word, idx) => {
-              const wordFrame = Math.max(0, frame - idx * 4);
-              const wordSpring = spring({
-                frame: wordFrame,
+          <div style={{ display: "flex", flexDirection: "column", gap: 12, marginTop: 20 }}>
+            {steps.map((step, index) => {
+              const delay = 34 + index * 18;
+              const fullStep = repairText(step);
+              const bodySize = fullStep.length > 260 ? 13.5 : fullStep.length > 190 ? 14.5 : 16;
+              const enter = spring({
+                frame: Math.max(0, frame - delay),
                 fps,
-                config: { damping: 14, stiffness: 180 },
+                config: { damping: 16, stiffness: 160 },
               });
-              const wordScale = interpolate(wordSpring, [0, 1], [0.7, 1]);
-              const wordOpacity = interpolate(wordFrame, [0, 10], [0, 1], {
+              const x = interpolate(enter, [0, 1], [-26, 0]);
+              const opacity = interpolate(frame, [delay, delay + 12], [0, 1], {
                 extrapolateLeft: "clamp",
                 extrapolateRight: "clamp",
               });
-
+              const active = activeStep >= index;
               return (
-                <span
-                  key={`${word}-${idx}`}
-                  style={{
-                    display: "inline-block",
-                    marginRight: 14,
-                    transform: `scale(${wordScale})`,
-                    opacity: wordOpacity,
-                    transformOrigin: "left bottom",
-                  }}
-                >
-                  {word}
-                </span>
-              );
-            })}
-          </h1>
-
-          <div
-            style={{
-              marginTop: 18,
-              width: lineWidth,
-              height: 3,
-              borderRadius: 2,
-              backgroundColor: slide.accentColor,
-            }}
-          />
-        </div>
-
-        <div
-          style={{
-            marginTop: 34,
-            display: "flex",
-            flexDirection: "column",
-            gap: 18,
-            maxWidth: 960,
-          }}
-        >
-          {steps.map((step, idx) => {
-            const startFrame = 24 + idx * 20;
-            const entrySpring = spring({
-              frame: Math.max(0, frame - startFrame),
-              fps,
-              config: { damping: 14, stiffness: 170 },
-            });
-            const translateY = interpolate(entrySpring, [0, 1], [40, 0]);
-            const opacity = interpolate(frame, [startFrame, startFrame + 10], [0, 1], {
-              extrapolateLeft: "clamp",
-              extrapolateRight: "clamp",
-            });
-
-            const numberScale = spring({
-              frame: Math.max(0, frame - startFrame),
-              fps,
-              config: { damping: 12, stiffness: 220 },
-            });
-
-            const connectorWidth = interpolate(frame, [startFrame + 8, startFrame + 28], [0, 100], {
-              extrapolateLeft: "clamp",
-              extrapolateRight: "clamp",
-            });
-
-            return (
-              <div key={`${step}-${idx}`}>
                 <div
+                  key={index}
                   style={{
-                    transform: `translateY(${translateY}px)`,
+                    height: 118,
+                    borderRadius: 8,
+                    backgroundColor: active ? `${slide.accentColor}18` : "rgba(255,255,255,0.055)",
+                    border: `1px solid ${active ? slide.accentColor : "rgba(255,255,255,0.1)"}`,
+                    padding: "14px 18px",
+                    transform: `translateX(${x}px)`,
                     opacity,
-                    backgroundColor: "rgba(255,255,255,0.06)",
-                    border: "1px solid rgba(255,255,255,0.1)",
-                    borderRadius: 16,
-                    padding: "20px 24px",
-                    display: "flex",
-                    alignItems: "flex-start",
-                    gap: 16,
+                    boxShadow: active ? `0 0 32px ${slide.accentColor}22` : "none",
                   }}
                 >
-                  <div
-                    style={{
-                      width: 40,
-                      height: 40,
-                      borderRadius: "50%",
-                      backgroundColor: slide.accentColor,
-                      color: "#0a0c16",
-                      fontWeight: 800,
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      flexShrink: 0,
-                      transform: `scale(${interpolate(numberScale, [0, 1], [0.6, 1])})`,
-                    }}
-                  >
-                    {idx + 1}
+                  <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                    <div
+                      style={{
+                        width: 34,
+                        height: 34,
+                        borderRadius: 8,
+                        backgroundColor: active ? slide.accentColor : "rgba(255,255,255,0.1)",
+                        color: active ? "#08111f" : "#cbd5e1",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        fontSize: 16,
+                        fontWeight: 900,
+                        flexShrink: 0,
+                      }}
+                    >
+                      {index + 1}
+                    </div>
+                    <div style={{ color: slide.accentColor, fontSize: 12, fontWeight: 900 }}>
+                      ACTION SECTION
+                    </div>
                   </div>
-                  <div
-                    style={{
-                      color: "#ffffff",
-                      fontSize: 24,
-                      lineHeight: 1.6,
-                      fontWeight: 500,
-                    }}
-                  >
-                    {step}
+                  <div style={{ color: "#f8fafc", marginTop: 8, fontSize: bodySize, lineHeight: 1.22, fontWeight: 760 }}>
+                    {fullStep}
                   </div>
                 </div>
-
-                {idx < steps.length - 1 ? (
-                  <div
-                    style={{
-                      marginLeft: 20,
-                      marginTop: 8,
-                      width: `${connectorWidth}%`,
-                      height: 4,
-                      borderRadius: 999,
-                      backgroundColor: slide.accentColor,
-                      opacity: 0.65,
-                    }}
-                  />
-                ) : null}
-              </div>
-            );
-          })}
+              );
+            })}
+          </div>
         </div>
-      </div>
-
-      {slide.audioFilePath ? <Audio src={slide.audioFilePath} /> : null}
-    </div>
+      </GlassPanel>
+    </CinematicStage>
   );
 };
 

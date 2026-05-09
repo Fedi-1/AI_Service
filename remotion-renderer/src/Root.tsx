@@ -13,9 +13,6 @@ interface SlideWrapperProps {
   children: React.ReactNode;
   localFrame: number;
   totalFrames: number;
-  slideIndex: number;
-  totalSlides: number;
-  lessonTitle: string;
   accentColor: string;
 }
 
@@ -23,9 +20,6 @@ const SlideWrapper: React.FC<SlideWrapperProps> = ({
   children,
   localFrame,
   totalFrames,
-  slideIndex,
-  totalSlides,
-  lessonTitle,
   accentColor,
 }) => {
   const outStart = totalFrames - TRANSITION_FRAMES;
@@ -54,16 +48,7 @@ const SlideWrapper: React.FC<SlideWrapperProps> = ({
   const scale = isTransitioningIn ? inScale : isTransitioningOut ? outScale : 1;
   const opacity = isTransitioningIn ? inOpacity : isTransitioningOut ? outOpacity : 1;
 
-  const safeLessonTitle = lessonTitle.length > 30 ? `${lessonTitle.slice(0, 30)}...` : lessonTitle;
-  const badgeOpacity = interpolate(localFrame, [10, 20], [0, 1], {
-    extrapolateLeft: "clamp",
-    extrapolateRight: "clamp",
-  });
-  const counterOpacity = interpolate(localFrame, [5, 15], [0, 1], {
-    extrapolateLeft: "clamp",
-    extrapolateRight: "clamp",
-  });
-  const progressWidth = interpolate(localFrame, [0, totalFrames], [0, 100], {
+  const transitionSweep = interpolate(localFrame, [0, TRANSITION_FRAMES], [-100, 100], {
     extrapolateLeft: "clamp",
     extrapolateRight: "clamp",
   });
@@ -80,59 +65,16 @@ const SlideWrapper: React.FC<SlideWrapperProps> = ({
       }}
     >
       {children}
-
       <div
         style={{
           position: "absolute",
-          top: 20,
-          right: 20,
-          padding: "8px 10px",
-          borderRadius: 8,
-          backgroundColor: "rgba(0,0,0,0.4)",
-          fontFamily: "Inter, system-ui, sans-serif",
-          fontSize: 12,
-          color: "#94a3b8",
-          opacity: badgeOpacity,
+          inset: 0,
+          background: `linear-gradient(105deg, transparent 0%, ${accentColor}00 35%, ${accentColor}40 48%, #ffffff22 50%, ${accentColor}20 54%, transparent 70%)`,
+          transform: `translateX(${transitionSweep}%)`,
+          opacity: localFrame < TRANSITION_FRAMES ? 1 : 0,
           pointerEvents: "none",
         }}
-      >
-        {safeLessonTitle}
-      </div>
-
-      <div
-        style={{
-          position: "absolute",
-          right: 20,
-          bottom: 16,
-          fontFamily: "Inter, system-ui, sans-serif",
-          fontSize: 14,
-          color: "#94a3b8",
-          opacity: counterOpacity,
-          pointerEvents: "none",
-        }}
-      >
-        {slideIndex + 1} / {totalSlides}
-      </div>
-
-      <div
-        style={{
-          position: "absolute",
-          left: 0,
-          right: 0,
-          bottom: 0,
-          height: 3,
-          backgroundColor: "rgba(255,255,255,0.1)",
-          pointerEvents: "none",
-        }}
-      >
-        <div
-          style={{
-            width: `${progressWidth}%`,
-            height: "100%",
-            backgroundColor: accentColor,
-          }}
-        />
-      </div>
+      />
     </div>
   );
 };
@@ -198,9 +140,6 @@ export const Root: React.FC<{ videoData: VideoData }> = ({ videoData }) => {
             <SlideWrapper
               localFrame={frame - startFrame}
               totalFrames={duration}
-              slideIndex={i}
-              totalSlides={slides.length}
-              lessonTitle={videoData.lessonTitle}
               accentColor={slide.accentColor}
             >
               {renderSlide(frame - startFrame, slide)}
