@@ -108,12 +108,14 @@ export const Root: React.FC<{ videoData: VideoData }> = ({ videoData }) => {
       <Slide2KeyConcepts
         slide={slide}
         currentTimeSeconds={localFrame / 30}
+        language={videoData.language}
       />
     ),
     (localFrame: number, slide: (typeof slides)[0]) => (
       <Slide3InPractice
         slide={slide}
         currentTimeSeconds={localFrame / 30}
+        language={videoData.language}
       />
     ),
     (localFrame: number, slide: (typeof slides)[0]) => (

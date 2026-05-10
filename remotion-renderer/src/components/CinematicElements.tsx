@@ -6,7 +6,7 @@ import {
   useCurrentFrame,
   useVideoConfig,
 } from "remotion";
-import { SlideData, WordTimestamp } from "../types";
+import { SlideData, SubtitleCue, VideoLanguage, WordTimestamp } from "../types";
 
 export const WIDTH = 1280;
 export const HEIGHT = 720;
@@ -49,6 +49,15 @@ export function repairText(text: string): string {
 export function clampText(text: string, max = 88): string {
   const clean = repairText(text).replace(/\s+/g, " ").trim();
   return clean.length > max ? `${clean.slice(0, max - 3)}...` : clean;
+}
+
+const ARABIC_TEXT_RE = /[\u0600-\u06ff]/;
+
+export function normalizeVideoLanguage(language?: string): VideoLanguage {
+  const value = (language || "en").trim().toLowerCase();
+  if (value.startsWith("fr")) return "fr";
+  if (value.startsWith("ar") || value.includes("arab") || ARABIC_TEXT_RE.test(value)) return "ar";
+  return "en";
 }
 
 export function splitIntoPoints(script: string, wanted = 3): string[] {
@@ -95,6 +104,103 @@ export function currentCaption(words: WordTimestamp[], seconds: number, maxWords
     .slice(start, safeEnd)
     .map((w) => w.word)
     .join(" ");
+}
+
+function cleanCaptionWord(word: string): string {
+  return repairText(word).replace(/\s+/g, " ").trim();
+}
+
+function captionTextFromWords(words: WordTimestamp[]): string {
+  return words.map((w) => cleanCaptionWord(w.word)).filter(Boolean).join(" ");
+}
+
+export function subtitleCuesFromWords(
+  words: WordTimestamp[],
+  language?: string
+): SubtitleCue[] {
+  const cleanedWords = words
+    .map((word) => ({ ...word, word: cleanCaptionWord(word.word) }))
+    .filter((word) => word.word && Number.isFinite(word.start) && Number.isFinite(word.end));
+
+  if (!cleanedWords.length) return [];
+
+  const lang = normalizeVideoLanguage(language);
+  const maxWords = lang === "ar" ? 8 : 10;
+  const maxChars = lang === "ar" ? 46 : 58;
+  const minWordsBeforeSoftBreak = lang === "ar" ? 3 : 4;
+  const rawCues: SubtitleCue[] = [];
+  let cueWords: WordTimestamp[] = [];
+  let cueStart = cleanedWords[0].start;
+
+  for (let i = 0; i < cleanedWords.length; i++) {
+    const word = cleanedWords[i];
+    const next = cleanedWords[i + 1];
+
+    if (!cueWords.length) cueStart = word.start;
+    cueWords.push(word);
+
+    const text = captionTextFromWords(cueWords);
+    const enoughForSoftBreak = cueWords.length >= minWordsBeforeSoftBreak;
+    const endsSentence = /[.!?؟…]$/.test(word.word);
+    const endsPhrase = /[,;:،؛]$/.test(word.word);
+    const nextGap = next ? Math.max(0, next.start - word.end) : 0;
+    const shouldBreak =
+      i === cleanedWords.length - 1 ||
+      (endsSentence && enoughForSoftBreak) ||
+      nextGap >= 0.45 ||
+      cueWords.length >= maxWords ||
+      text.length >= maxChars ||
+      (endsPhrase && cueWords.length >= 5);
+
+    if (shouldBreak) {
+      rawCues.push({
+        text,
+        start: cueStart,
+        end: Math.max(word.end, cueStart + 0.25),
+      });
+      cueWords = [];
+    }
+  }
+
+  return rawCues.map((cue, index) => {
+    const next = rawCues[index + 1];
+    const minEnd = cue.start + 1.05;
+    const paddedEnd = cue.end + 0.45;
+    const nextLimit = next ? next.start - 0.04 : cue.end + 1.1;
+    const end = next
+      ? Math.max(cue.end, Math.min(nextLimit, Math.max(minEnd, paddedEnd)))
+      : Math.max(minEnd, paddedEnd);
+
+    return { ...cue, end };
+  });
+}
+
+export function subtitleCuesFromScript(
+  script: string,
+  durationSeconds: number,
+  language?: string
+): SubtitleCue[] {
+  const words = repairText(script)
+    .replace(/\n+/g, " ")
+    .split(/\s+/)
+    .map((word) => word.trim())
+    .filter(Boolean);
+
+  if (!words.length) return [];
+
+  const duration = Math.max(1, durationSeconds);
+  const syntheticWords = words.map((word, index) => {
+    const start = (index / words.length) * duration;
+    const end = ((index + 1) / words.length) * duration;
+    return { word, start, end };
+  });
+
+  return subtitleCuesFromWords(syntheticWords, language);
+}
+
+export function currentSubtitle(cues: SubtitleCue[], seconds: number): string {
+  const cue = cues.find((item) => seconds >= item.start && seconds < item.end);
+  return cue?.text || "";
 }
 
 export function scriptSummaryLines(script: string, wanted = 5): string[] {
@@ -171,9 +277,16 @@ export const CinematicStage: React.FC<{
   currentTimeSeconds: number;
   sceneLabel: string;
   headerTitle?: string;
+  language?: string;
   children: React.ReactNode;
-}> = ({ slide, currentTimeSeconds, sceneLabel, headerTitle, children }) => {
+}> = ({ slide, currentTimeSeconds, sceneLabel, headerTitle, language, children }) => {
   const frame = useCurrentFrame();
+  const videoLanguage = normalizeVideoLanguage(language);
+  const subtitleCues = React.useMemo(() => {
+    if (slide.subtitles?.length) return slide.subtitles;
+    if (slide.words.length) return subtitleCuesFromWords(slide.words, videoLanguage);
+    return subtitleCuesFromScript(slide.script, slide.audioDurationSeconds, videoLanguage);
+  }, [slide.audioDurationSeconds, slide.script, slide.subtitles, slide.words, videoLanguage]);
   const totalFrames = Math.max(1, Math.ceil(slide.audioDurationSeconds * 30) + 20);
   const cameraX = interpolate(frame, [0, totalFrames], [0, -28], {
     extrapolateLeft: "clamp",
@@ -216,8 +329,9 @@ export const CinematicStage: React.FC<{
         accentColor={slide.accentColor}
       />
       <NarrationCaption
-        text={repairText(currentCaption(slide.words, currentTimeSeconds))}
+        text={repairText(currentSubtitle(subtitleCues, currentTimeSeconds))}
         accentColor={slide.accentColor}
+        language={videoLanguage}
       />
       <div
         style={{
@@ -355,11 +469,14 @@ export const SceneHeader: React.FC<{
   );
 };
 
-export const NarrationCaption: React.FC<{ text: string; accentColor: string }> = ({
+export const NarrationCaption: React.FC<{ text: string; accentColor: string; language?: string }> = ({
   text,
   accentColor,
+  language,
 }) => {
   const frame = useCurrentFrame();
+  const videoLanguage = normalizeVideoLanguage(language);
+  const isArabic = videoLanguage === "ar" || ARABIC_TEXT_RE.test(text);
   const opacity = text
     ? interpolate(frame, [18, 30], [0, 1], {
         extrapolateLeft: "clamp",
@@ -371,20 +488,30 @@ export const NarrationCaption: React.FC<{ text: string; accentColor: string }> =
     <div
       style={{
         position: "absolute",
-        left: 315,
-        right: 315,
-        bottom: 38,
-        minHeight: 54,
-        padding: "11px 18px",
+        left: 190,
+        right: 190,
+        bottom: 42,
+        minHeight: 78,
+        padding: "12px 24px",
         borderRadius: 8,
-        backgroundColor: "rgba(2, 6, 23, 0.74)",
-        border: "1px solid rgba(255,255,255,0.1)",
-        boxShadow: `0 0 38px ${accentColor}22`,
-        color: "#e5e7eb",
-        fontSize: 22,
-        lineHeight: 1.35,
+        backgroundColor: "rgba(0, 0, 0, 0.68)",
+        border: "1px solid rgba(255,255,255,0.16)",
+        boxShadow: `0 18px 46px rgba(0,0,0,0.52), 0 0 34px ${accentColor}18`,
+        color: "#ffffff",
+        fontFamily: isArabic
+          ? "Tahoma, Arial, system-ui, sans-serif"
+          : "Inter, Arial, system-ui, sans-serif",
+        fontSize: isArabic ? 29 : 26,
+        fontWeight: 760,
+        lineHeight: 1.25,
         textAlign: "center",
+        direction: isArabic ? "rtl" : "ltr",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
         opacity,
+        textShadow: "0 2px 6px rgba(0,0,0,0.95), 0 0 18px rgba(0,0,0,0.72)",
+        whiteSpace: "normal",
       }}
     >
       {text}

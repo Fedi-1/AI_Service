@@ -5,12 +5,14 @@ import {
   CinematicStage,
   DataStream,
   GlassPanel,
+  normalizeVideoLanguage,
   splitIntoPoints,
 } from "./CinematicElements";
 
 interface Slide2Props {
   slide: SlideData;
   currentTimeSeconds: number;
+  language: string;
 }
 
 const nodePositions = [
@@ -19,9 +21,10 @@ const nodePositions = [
   { x: 808, y: 420 },
 ];
 
-const Slide2KeyConcepts: React.FC<Slide2Props> = ({ slide, currentTimeSeconds }) => {
+const Slide2KeyConcepts: React.FC<Slide2Props> = ({ slide, currentTimeSeconds, language }) => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
+  const videoLanguage = normalizeVideoLanguage(language);
   const points = splitIntoPoints(slide.script, 3);
   const corePulse = interpolate(frame % 54, [0, 27, 54], [1, 1.08, 1], {
     extrapolateLeft: "clamp",
@@ -33,7 +36,10 @@ const Slide2KeyConcepts: React.FC<Slide2Props> = ({ slide, currentTimeSeconds })
     <CinematicStage
       slide={slide}
       currentTimeSeconds={currentTimeSeconds}
-      sceneLabel="Concepts"
+      sceneLabel={
+        videoLanguage === "fr" ? "Concepts" : videoLanguage === "ar" ? "المفاهيم" : "Concepts"
+      }
+      language={videoLanguage}
     >
       {nodePositions.map((pos, index) => (
         <DataStream

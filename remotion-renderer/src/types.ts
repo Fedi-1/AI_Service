@@ -4,11 +4,20 @@ export interface WordTimestamp {
   end: number;
 }
 
+export interface SubtitleCue {
+  text: string;
+  start: number;
+  end: number;
+}
+
+export type VideoLanguage = "fr" | "en" | "ar";
+
 export interface SlideData {
   title: string;
   accentColor: string;
   script: string;
   words: WordTimestamp[];
+  subtitles?: SubtitleCue[];
   audioDurationSeconds: number;
   audioFilePath: string;
 }
@@ -16,7 +25,7 @@ export interface SlideData {
 export interface VideoData {
   slides: [SlideData, SlideData, SlideData, SlideData];
   lessonTitle: string;
-  language: "fr" | "en";
+  language: VideoLanguage;
   flashcardCount: number;
   quizCount: number;
   estimatedReadTime: number;

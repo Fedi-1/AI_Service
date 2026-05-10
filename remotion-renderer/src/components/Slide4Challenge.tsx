@@ -1,6 +1,6 @@
 import React from "react";
 import { SlideData } from "../types";
-import { CinematicStage, GlassPanel, repairText } from "./CinematicElements";
+import { CinematicStage, GlassPanel, normalizeVideoLanguage, repairText } from "./CinematicElements";
 
 interface Slide4Props {
   slide: SlideData;
@@ -26,22 +26,31 @@ const Slide4Challenge: React.FC<Slide4Props> = ({
   currentTimeSeconds,
   language,
 }) => {
+  const videoLanguage = normalizeVideoLanguage(language);
   const question = extractQuestion(slide.script);
   const timer = Math.max(0, 30 - Math.floor(currentTimeSeconds * 2));
-  const isEn = !language.startsWith("fr");
   const questionSize = question.length > 190 ? 27 : question.length > 130 ? 31 : 36;
 
   return (
     <CinematicStage
       slide={slide}
       currentTimeSeconds={currentTimeSeconds}
-      sceneLabel={isEn ? "Quiz question" : "Question du quiz"}
+      sceneLabel={
+        videoLanguage === "fr"
+          ? "Question du quiz"
+          : videoLanguage === "ar"
+            ? "سؤال الاختبار"
+            : "Quiz question"
+      }
       headerTitle=""
+      language={videoLanguage}
     >
       <GlassPanel x={150} y={148} width={900} height={360} delay={12} accentColor={slide.accentColor}>
         <div style={{ padding: 30 }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            <div style={{ color: slide.accentColor, fontSize: 13, fontWeight: 900 }}>QUESTION</div>
+            <div style={{ color: slide.accentColor, fontSize: 13, fontWeight: 900 }}>
+              {videoLanguage === "ar" ? "سؤال" : "QUESTION"}
+            </div>
             <div
               style={{
                 width: 72,
@@ -73,7 +82,17 @@ const Slide4Challenge: React.FC<Slide4Props> = ({
               alignItems: "center",
             }}
           >
-            <div style={{ color: "#f8fafc", fontSize: questionSize, lineHeight: 1.18, fontWeight: 900 }}>
+            <div
+              style={{
+                color: "#f8fafc",
+                fontSize: questionSize,
+                lineHeight: 1.18,
+                fontWeight: 900,
+                direction: videoLanguage === "ar" ? "rtl" : "ltr",
+                textAlign: videoLanguage === "ar" ? "right" : "left",
+                width: "100%",
+              }}
+            >
               {question}
             </div>
           </div>

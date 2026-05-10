@@ -31,6 +31,7 @@ ELEVENLABS_API_KEY = os.getenv("ELEVENLABS_API_KEY", "")
 # ElevenLabs voice IDs
 ELEVENLABS_VOICE_FR = "nPczCjzI2devNBz1zQrb"   # Brian â€” calm professional male (French)
 ELEVENLABS_VOICE_EN = "21m00Tcm4TlvDq8ikWAM"   # Rachel â€” clear professional female (English)
+ELEVENLABS_VOICE_AR = os.getenv("ELEVENLABS_VOICE_AR") or ELEVENLABS_VOICE_EN
 
 client = Groq(api_key=GROQ_API_KEY)
 MODEL  = "llama-3.3-70b-versatile"   # fast, free-tier Groq model
@@ -52,6 +53,24 @@ CHUNK_WORD_SIZE      = 800
 MAX_CHUNKS           = 10
 
 os.makedirs("uploads/recap-videos", exist_ok=True)
+
+
+def normalize_video_language(language: str | None) -> str:
+    value = (language or "en").strip().lower()
+    if value.startswith("fr"):
+        return "fr"
+    if value.startswith("ar") or "arab" in value or "عرب" in value:
+        return "ar"
+    return "en"
+
+
+def video_language_name(language: str | None) -> str:
+    code = normalize_video_language(language)
+    if code == "fr":
+        return "French"
+    if code == "ar":
+        return "Arabic"
+    return "English"
 
 
 # â”€â”€â”€ Text Extraction â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -308,8 +327,14 @@ def generate_video_script(
     Generates narration scripts for all 4 slides via a single Llama 3.3 call.
     Returns dict with keys: slide1, slide2, slide3, slide4.
     """
-    lang_name = "French" if language.lower().startswith("fr") else "English"
-    prompt = f"""You are writing a narration script for a short educational video about "{lesson_title}". The video has 4 slides. Write the narrator text for each slide in {lang_name}. The narrator speaks in a calm, clear, professor-like tone. Use simple academic language appropriate for university students.
+    language_code = normalize_video_language(language)
+    lang_name = video_language_name(language_code)
+    language_detail = (
+        "Use Modern Standard Arabic with clear educational phrasing."
+        if language_code == "ar"
+        else "Keep the language pure and natural."
+    )
+    prompt = f"""You are writing a narration script for a short educational video about "{lesson_title}". The video has 4 slides. Write the narrator text for each slide in {lang_name}. {language_detail} The narrator speaks in a calm, clear, professor-like tone. Use simple academic language appropriate for university students.
 
 Slide 1 is about why this lesson matters in the real world. Base it on this hook: {real_world_hook}. Expand it into 3 sentences that explain the real-world importance naturally as if speaking to a student. Do not list facts â€” speak conversationally.
 
@@ -331,12 +356,19 @@ Return ONLY a valid JSON object with exactly 4 fields: slide1, slide2, slide3, s
         return scripts
     except Exception as e:
         print(f"[generate_video_script] fallback due to: {e}")
-        if language.lower().startswith("fr"):
+        if language_code == "fr":
             return {
                 "slide1": f"{real_world_hook} Ce concept joue un rÃ´le fondamental dans de nombreuses technologies modernes que vous utilisez au quotidien.",
                 "slide2": f"{key_takeaway} Ces points essentiels forment la base de votre comprÃ©hension de ce sujet.",
                 "slide3": f"1. {practical_tip}\n2. Pratiquez avec un exemple concret sur votre machine.\n3. Comparez votre rÃ©sultat avec la documentation officielle.",
                 "slide4": f"Prenez un moment pour rÃ©flÃ©chir attentivement Ã  cette question avant de passer au quiz. {challenge_question}",
+            }
+        if language_code == "ar":
+            return {
+                "slide1": f"{real_world_hook} هذا المفهوم مهم في التقنيات الحديثة التي نستخدمها يوميا.",
+                "slide2": f"{key_takeaway} هذه النقاط الأساسية تساعدك على فهم الموضوع بوضوح.",
+                "slide3": f"1. {practical_tip}\n2. طبق الفكرة على مثال بسيط في بيئة العمل.\n3. قارن النتيجة مع مرجع موثوق.",
+                "slide4": f"خذ لحظة للتفكير في هذا السؤال قبل الانتقال إلى الاختبار. {challenge_question}",
             }
         else:
             return {
@@ -392,7 +424,13 @@ def generate_slide_audio(
         print(f"[generate_slide_audio] ELEVENLABS_API_KEY not set â€” using silent fallback")
         return _silent_fallback()
 
-    voice_id = ELEVENLABS_VOICE_FR if language.lower().startswith("fr") else ELEVENLABS_VOICE_EN
+    language_code = normalize_video_language(language)
+    if language_code == "fr":
+        voice_id = ELEVENLABS_VOICE_FR
+    elif language_code == "ar":
+        voice_id = ELEVENLABS_VOICE_AR
+    else:
+        voice_id = ELEVENLABS_VOICE_EN
     url = f"https://api.elevenlabs.io/v1/text-to-speech/{voice_id}/with-timestamps"
 
     headers = {
@@ -491,83 +529,124 @@ def generate_recap_video(
     language: str,
 ) -> str | None:
     """
-    Render a narrated MP4 recap video (4 slides with ElevenLabs TTS + word-by-word
-    text animation). Returns the absolute path to the saved file, or None on failure.
+    Render a narrated MP4 recap video with stable subtitle cues.
+    Returns the absolute path to the saved file, or None on failure.
     """
     print(f"[generate_recap_video] called for lesson {lesson_number}: '{lesson_title}'")
     try:
-        is_fr = (language or "").lower().startswith("fr")
+        language_code = normalize_video_language(language)
+        is_fr = language_code == "fr"
+        is_ar = language_code == "ar"
 
         # â”€â”€ Content generation (Groq) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         try:
-            hook_prompt = (
-                f"Donne 2 Ã  3 phrases expliquant des applications du monde rÃ©el oÃ¹ \"{lesson_title}\" est utilisÃ©. "
-                f"Pour chaque application mentionne une app ou technologie bien connue et explique comment ce concept s'y applique. "
-                f"Maximum 50 mots au total. RÃ©ponds en franÃ§ais."
-                if is_fr else
-                f"Give 2 to 3 sentences explaining real-world applications where \"{lesson_title}\" is used. "
-                f"For each application mention a specific well-known app or technology and explain how this concept applies to it. "
-                f"Total maximum 50 words. Respond in English."
-            )
+            if is_fr:
+                hook_prompt = (
+                    f"Donne 2 Ã  3 phrases expliquant des applications du monde rÃ©el oÃ¹ \"{lesson_title}\" est utilisÃ©. "
+                    f"Pour chaque application mentionne une app ou technologie bien connue et explique comment ce concept s'y applique. "
+                    f"Maximum 50 mots au total. RÃ©ponds en franÃ§ais."
+                )
+            elif is_ar:
+                hook_prompt = (
+                    f"Give 2 to 3 sentences explaining real-world applications where \"{lesson_title}\" is used. "
+                    f"For each application mention a specific well-known app or technology and explain how this concept applies to it. "
+                    f"Total maximum 50 words. Respond in Modern Standard Arabic."
+                )
+            else:
+                hook_prompt = (
+                    f"Give 2 to 3 sentences explaining real-world applications where \"{lesson_title}\" is used. "
+                    f"For each application mention a specific well-known app or technology and explain how this concept applies to it. "
+                    f"Total maximum 50 words. Respond in English."
+                )
             real_world_hook = groq_chat(hook_prompt, temperature=0.7, max_tokens=200).strip()
         except Exception:
-            real_world_hook = (
-                "Ce concept est utilisÃ© dans de nombreuses applications modernes comme les bases de donnÃ©es et les frameworks web."
-                if is_fr else
-                "This concept is used in modern applications like databases and web frameworks."
-            )
+            if is_fr:
+                real_world_hook = "Ce concept est utilisÃ© dans de nombreuses applications modernes comme les bases de donnÃ©es et les frameworks web."
+            elif is_ar:
+                real_world_hook = "يستخدم هذا المفهوم في تطبيقات حديثة مثل قواعد البيانات وأطر عمل الويب."
+            else:
+                real_world_hook = "This concept is used in modern applications like databases and web frameworks."
 
         try:
-            takeaway_prompt = (
-                f"Liste exactement 3 points clÃ©s qu'un Ã©tudiant doit retenir d'une leÃ§on sur \"{lesson_title}\". "
-                f"Format : 3 courtes affirmations commenÃ§ant chacune par un tiret. Maximum 12 mots par point. RÃ©ponds en franÃ§ais."
-                if is_fr else
-                f"List exactly 3 key points a student must remember from a lesson about \"{lesson_title}\". "
-                f"Format as 3 short statements each starting with a dash character. Each point maximum 12 words. Respond in English."
-            )
+            if is_fr:
+                takeaway_prompt = (
+                    f"Liste exactement 3 points clÃ©s qu'un Ã©tudiant doit retenir d'une leÃ§on sur \"{lesson_title}\". "
+                    f"Format : 3 courtes affirmations commenÃ§ant chacune par un tiret. Maximum 12 mots par point. RÃ©ponds en franÃ§ais."
+                )
+            elif is_ar:
+                takeaway_prompt = (
+                    f"List exactly 3 key points a student must remember from a lesson about \"{lesson_title}\". "
+                    f"Format as 3 short statements each starting with a dash character. Each point maximum 12 words. Respond in Modern Standard Arabic."
+                )
+            else:
+                takeaway_prompt = (
+                    f"List exactly 3 key points a student must remember from a lesson about \"{lesson_title}\". "
+                    f"Format as 3 short statements each starting with a dash character. Each point maximum 12 words. Respond in English."
+                )
             key_takeaway = groq_chat(takeaway_prompt, temperature=0.7, max_tokens=200).strip()
         except Exception:
-            key_takeaway = (
-                "- MaÃ®trisez les concepts fondamentaux avant d'avancer.\n- Pratiquez rÃ©guliÃ¨rement avec des exemples concrets.\n- Reliez ce concept aux notions dÃ©jÃ  apprises."
-                if is_fr else
-                "- Master the fundamentals before moving forward.\n- Practice regularly with concrete examples.\n- Connect this concept to what you already know."
-            )
+            if is_fr:
+                key_takeaway = "- MaÃ®trisez les concepts fondamentaux avant d'avancer.\n- Pratiquez rÃ©guliÃ¨rement avec des exemples concrets.\n- Reliez ce concept aux notions dÃ©jÃ  apprises."
+            elif is_ar:
+                key_takeaway = "- افهم المفاهيم الأساسية قبل التقدم.\n- تدرب بانتظام على أمثلة واقعية.\n- اربط الفكرة بما تعلمته سابقا."
+            else:
+                key_takeaway = "- Master the fundamentals before moving forward.\n- Practice regularly with concrete examples.\n- Connect this concept to what you already know."
 
         try:
-            tip_prompt = (
-                f"Donne exactement 3 Ã©tapes pratiques concrÃ¨tes pour quelqu'un qui apprend \"{lesson_title}\". "
-                f"Chaque Ã©tape doit mentionner un outil, une mÃ©thode ou une technologie spÃ©cifique. "
-                f"Retourne exactement 3 lignes formatÃ©es strictement comme '1. [Ã©tape]' retour Ã  la ligne '2. [Ã©tape]' retour Ã  la ligne '3. [Ã©tape]'. "
-                f"Maximum 18 mots par Ã©tape. RÃ©ponds en franÃ§ais. Retourne uniquement les 3 lignes sans texte supplÃ©mentaire."
-                if is_fr else
-                f"Give exactly 3 concrete practical steps for someone learning about \"{lesson_title}\". "
-                f"Each step must mention a specific tool, method, or technology. "
-                f"Return exactly 3 lines formatted strictly as '1. [step]' newline '2. [step]' newline '3. [step]'. "
-                f"Maximum 18 words per step. Respond in English. Return only the 3 lines with no extra text or explanation."
-            )
+            if is_fr:
+                tip_prompt = (
+                    f"Donne exactement 3 Ã©tapes pratiques concrÃ¨tes pour quelqu'un qui apprend \"{lesson_title}\". "
+                    f"Chaque Ã©tape doit mentionner un outil, une mÃ©thode ou une technologie spÃ©cifique. "
+                    f"Retourne exactement 3 lignes formatÃ©es strictement comme '1. [Ã©tape]' retour Ã  la ligne '2. [Ã©tape]' retour Ã  la ligne '3. [Ã©tape]'. "
+                    f"Maximum 18 mots par Ã©tape. RÃ©ponds en franÃ§ais. Retourne uniquement les 3 lignes sans texte supplÃ©mentaire."
+                )
+            elif is_ar:
+                tip_prompt = (
+                    f"Give exactly 3 concrete practical steps for someone learning about \"{lesson_title}\". "
+                    f"Each step must mention a specific tool, method, or technology. "
+                    f"Return exactly 3 lines formatted strictly as '1. [step]' newline '2. [step]' newline '3. [step]'. "
+                    f"Maximum 18 words per step. Respond in Modern Standard Arabic. Return only the 3 lines with no extra text or explanation."
+                )
+            else:
+                tip_prompt = (
+                    f"Give exactly 3 concrete practical steps for someone learning about \"{lesson_title}\". "
+                    f"Each step must mention a specific tool, method, or technology. "
+                    f"Return exactly 3 lines formatted strictly as '1. [step]' newline '2. [step]' newline '3. [step]'. "
+                    f"Maximum 18 words per step. Respond in English. Return only the 3 lines with no extra text or explanation."
+                )
             practical_tip = groq_chat(tip_prompt, temperature=0.7, max_tokens=200).strip()
         except Exception:
-            practical_tip = (
-                "1. Lisez le rÃ©sumÃ© et identifiez les concepts clÃ©s.\n2. CrÃ©ez un exemple simple.\n3. Expliquez le concept Ã  voix haute."
-                if is_fr else
-                "1. Read the summary and identify the key concepts.\n2. Build a simple example.\n3. Explain the concept out loud."
-            )
+            if is_fr:
+                practical_tip = "1. Lisez le rÃ©sumÃ© et identifiez les concepts clÃ©s.\n2. CrÃ©ez un exemple simple.\n3. Expliquez le concept Ã  voix haute."
+            elif is_ar:
+                practical_tip = "1. اقرأ الملخص وحدد المفاهيم الأساسية.\n2. ابن مثالا بسيطا لتطبيق الفكرة.\n3. اشرح المفهوم بصوت واضح."
+            else:
+                practical_tip = "1. Read the summary and identify the key concepts.\n2. Build a simple example.\n3. Explain the concept out loud."
 
         try:
-            challenge_prompt = (
-                f"Formule une question de rÃ©flexion ouverte sur \"{lesson_title}\" pour prÃ©parer un Ã©tudiant Ã  un quiz. "
-                f"La question doit tester la comprÃ©hension profonde, pas la mÃ©morisation. Maximum 25 mots. RÃ©ponds en franÃ§ais."
-                if is_fr else
-                f"Write one open-ended thinking question about \"{lesson_title}\" to prepare a student for a quiz. "
-                f"The question should test deep understanding, not memorisation. Maximum 25 words. Respond in English."
-            )
+            if is_fr:
+                challenge_prompt = (
+                    f"Formule une question de rÃ©flexion ouverte sur \"{lesson_title}\" pour prÃ©parer un Ã©tudiant Ã  un quiz. "
+                    f"La question doit tester la comprÃ©hension profonde, pas la mÃ©morisation. Maximum 25 mots. RÃ©ponds en franÃ§ais."
+                )
+            elif is_ar:
+                challenge_prompt = (
+                    f"Write one open-ended thinking question about \"{lesson_title}\" to prepare a student for a quiz. "
+                    f"The question should test deep understanding, not memorisation. Maximum 25 words. Respond in Modern Standard Arabic."
+                )
+            else:
+                challenge_prompt = (
+                    f"Write one open-ended thinking question about \"{lesson_title}\" to prepare a student for a quiz. "
+                    f"The question should test deep understanding, not memorisation. Maximum 25 words. Respond in English."
+                )
             challenge_question = groq_chat(challenge_prompt, temperature=0.7, max_tokens=100).strip()
         except Exception:
-            challenge_question = (
-                f"Comment appliqueriez-vous les concepts de \"{lesson_title}\" pour rÃ©soudre un problÃ¨me concret ?"
-                if is_fr else
-                f"How would you apply the concepts of \"{lesson_title}\" to solve a real-world problem?"
-            )
+            if is_fr:
+                challenge_question = f"Comment appliqueriez-vous les concepts de \"{lesson_title}\" pour rÃ©soudre un problÃ¨me concret ?"
+            elif is_ar:
+                challenge_question = f"كيف تطبق مفاهيم \"{lesson_title}\" لحل مشكلة واقعية؟"
+            else:
+                challenge_question = f"How would you apply the concepts of \"{lesson_title}\" to solve a real-world problem?"
 
         # â”€â”€ Narration scripts (Groq) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         scripts = generate_video_script(
@@ -576,7 +655,7 @@ def generate_recap_video(
             key_takeaway=key_takeaway,
             practical_tip=practical_tip,
             challenge_question=challenge_question,
-            language=language,
+            language=language_code,
         )
 
         # â”€â”€ Slide configurations â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -585,22 +664,22 @@ def generate_recap_video(
 
         slide_configs = [
             {
-                "title":      "Pourquoi apprendre ceci ?" if is_fr else "Why does this matter?",
+                "title":      "Pourquoi apprendre ceci ?" if is_fr else "لماذا هذا مهم؟" if is_ar else "Why does this matter?",
                 "accentColor": GOLD_HEX,
                 "script":     scripts["slide1"],
             },
             {
-                "title":      "Ã€ retenir" if is_fr else "Key Takeaway",
+                "title":      "Ã€ retenir" if is_fr else "أهم الأفكار" if is_ar else "Key Takeaway",
                 "accentColor": INDIGO_HEX,
                 "script":     scripts["slide2"],
             },
             {
-                "title":      "Dans la pratique" if is_fr else "In Practice",
+                "title":      "Dans la pratique" if is_fr else "في التطبيق" if is_ar else "In Practice",
                 "accentColor": GOLD_HEX,
                 "script":     scripts["slide3"],
             },
             {
-                "title":      "DÃ©fi avant le quiz" if is_fr else "Challenge before the quiz",
+                "title":      "DÃ©fi avant le quiz" if is_fr else "تحد قبل الاختبار" if is_ar else "Challenge before the quiz",
                 "accentColor": "#a78bfa",
                 "script":     scripts["slide4"],
             },
@@ -613,7 +692,7 @@ def generate_recap_video(
             print(f"[generate_recap_video] generating audio for slide {slide_num}...")
             audio_path, word_ts = generate_slide_audio(
                 slide_text=cfg["script"],
-                language=language,
+                language=language_code,
                 slide_index=slide_num,
             )
             duration = _audio_duration_seconds(audio_path)
@@ -626,7 +705,7 @@ def generate_recap_video(
         # â”€â”€ Build VideoData JSON for Remotion â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         video_data = {
             "lessonTitle":     lesson_title,
-            "language":        "fr" if is_fr else "en",
+            "language":        language_code,
             "flashcardCount":  len(flashcard_terms),
             "quizCount":       5,
             "estimatedReadTime": estimated_read_time,
@@ -647,10 +726,10 @@ def generate_recap_video(
         os.makedirs(os.path.join("uploads", "recap-videos"), exist_ok=True)
 
         json_path = os.path.abspath(
-            os.path.join("uploads", "recap-videos", f"data_{lesson_number}_{safe}.json")
+            os.path.join("uploads", "recap-videos", f"data_{lesson_number}_{language_code}_{safe}.json")
         )
         out = os.path.abspath(
-            os.path.join("uploads", "recap-videos", f"lesson_{lesson_number}_{safe}.mp4")
+            os.path.join("uploads", "recap-videos", f"lesson_{lesson_number}_{language_code}_{safe}.mp4")
         )
 
         with open(json_path, "w", encoding="utf-8") as jf:
@@ -780,7 +859,7 @@ class GenerateLessonRecapRequest(BaseModel):
     lessonSummary: str
     estimatedReadTime: int
     courseTitle: str
-    language: str  # "fr" or "en"
+    language: str  # "fr", "en", or "ar"
 
 
 # â”€â”€â”€ On-demand Exam Generation â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -967,9 +1046,10 @@ async def generate_exam(request: GenerateExamRequest):
 @app.post("/api/generate-lesson-recap")
 async def generate_lesson_recap_endpoint(request: GenerateLessonRecapRequest):
     """Generate (or return cached) a recap video for a single lesson."""
+    language_code = normalize_video_language(request.language)
     safe = re.sub(r"[^\w]", "_", request.lessonTitle.encode("ascii", "ignore").decode())[:30]
     expected_path = os.path.abspath(
-        os.path.join("uploads", "recap-videos", f"lesson_{request.lessonNumber}_{safe}.mp4")
+        os.path.join("uploads", "recap-videos", f"lesson_{request.lessonNumber}_{language_code}_{safe}.mp4")
     )
     # Return cached file if it already exists
     if os.path.exists(expected_path):
@@ -984,7 +1064,7 @@ async def generate_lesson_recap_endpoint(request: GenerateLessonRecapRequest):
             lesson_summary     = request.lessonSummary,
             estimated_read_time= request.estimatedReadTime,
             course_title       = request.courseTitle,
-            language           = request.language,
+            language           = language_code,
         )
         return {"recapVideoPath": path}
     except HTTPException:

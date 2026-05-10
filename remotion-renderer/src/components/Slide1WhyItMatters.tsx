@@ -4,6 +4,7 @@ import {
   CinematicStage,
   extractKeywords,
   GlassPanel,
+  normalizeVideoLanguage,
   phraseLabel,
   repairText,
   splitIntoPoints,
@@ -15,7 +16,8 @@ interface Slide1Props {
   language: string;
 }
 
-const Slide1WhyItMatters: React.FC<Slide1Props> = ({ slide, currentTimeSeconds }) => {
+const Slide1WhyItMatters: React.FC<Slide1Props> = ({ slide, currentTimeSeconds, language }) => {
+  const videoLanguage = normalizeVideoLanguage(language);
   const points = splitIntoPoints(slide.script, 3).filter((point) => repairText(point).trim());
   const lessonLabels = points.map((point, index) =>
     phraseLabel(point, ["Key idea", "Context", "Application"][index])
@@ -27,7 +29,14 @@ const Slide1WhyItMatters: React.FC<Slide1Props> = ({ slide, currentTimeSeconds }
     <CinematicStage
       slide={slide}
       currentTimeSeconds={currentTimeSeconds}
-      sceneLabel="Lesson analysis"
+      sceneLabel={
+        videoLanguage === "fr"
+          ? "Analyse de la lecon"
+          : videoLanguage === "ar"
+            ? "تحليل الدرس"
+            : "Lesson analysis"
+      }
+      language={videoLanguage}
     >
       <GlassPanel x={100} y={154} width={270} height={394} delay={8} accentColor={slide.accentColor}>
         <div style={{ padding: 22 }}>

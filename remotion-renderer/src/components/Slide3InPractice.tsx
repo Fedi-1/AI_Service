@@ -4,6 +4,7 @@ import { SlideData } from "../types";
 import {
   CinematicStage,
   GlassPanel,
+  normalizeVideoLanguage,
   repairText,
   splitIntoPoints,
 } from "./CinematicElements";
@@ -11,11 +12,13 @@ import {
 interface Slide3Props {
   slide: SlideData;
   currentTimeSeconds: number;
+  language: string;
 }
 
-const Slide3InPractice: React.FC<Slide3Props> = ({ slide, currentTimeSeconds }) => {
+const Slide3InPractice: React.FC<Slide3Props> = ({ slide, currentTimeSeconds, language }) => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
+  const videoLanguage = normalizeVideoLanguage(language);
   const steps = splitIntoPoints(slide.script, 3).filter((step) => repairText(step).trim());
   const activeStep = Math.min(
     Math.max(0, steps.length - 1),
@@ -26,7 +29,10 @@ const Slide3InPractice: React.FC<Slide3Props> = ({ slide, currentTimeSeconds }) 
     <CinematicStage
       slide={slide}
       currentTimeSeconds={currentTimeSeconds}
-      sceneLabel="Application"
+      sceneLabel={
+        videoLanguage === "fr" ? "Application" : videoLanguage === "ar" ? "التطبيق" : "Application"
+      }
+      language={videoLanguage}
     >
       <GlassPanel x={88} y={102} width={1010} height={500} delay={12} accentColor={slide.accentColor}>
         <div style={{ padding: 22 }}>
@@ -36,7 +42,11 @@ const Slide3InPractice: React.FC<Slide3Props> = ({ slide, currentTimeSeconds }) 
                 {repairText(slide.title)}
               </div>
               <div style={{ color: "#94a3b8", marginTop: 6, fontSize: 14 }}>
-                Actions de la lecon
+                {videoLanguage === "fr"
+                  ? "Actions de la lecon"
+                  : videoLanguage === "ar"
+                    ? "خطوات تطبيقية"
+                    : "Practical steps"}
               </div>
             </div>
             <div
@@ -53,7 +63,7 @@ const Slide3InPractice: React.FC<Slide3Props> = ({ slide, currentTimeSeconds }) 
                 fontWeight: 900,
               }}
             >
-              PRACTICE
+              {videoLanguage === "fr" ? "PRATIQUE" : videoLanguage === "ar" ? "تطبيق" : "PRACTICE"}
             </div>
           </div>
 
