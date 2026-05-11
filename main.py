@@ -7,6 +7,7 @@ import traceback
 import base64
 import glob
 import requests
+from html import escape
 
 import numpy as np
 import pypdf
@@ -518,6 +519,314 @@ def _audio_duration_seconds(mp3_path: str) -> float:
         return 10.0
 
 
+def _clean_caption_word(word: object) -> str:
+    return re.sub(r"\s+", " ", str(word or "")).strip()
+
+
+def _caption_text_from_words(words: list[dict]) -> str:
+    return " ".join(
+        cleaned for cleaned in (_clean_caption_word(w.get("word", "")) for w in words) if cleaned
+    )
+
+
+def _subtitle_cues_from_words(words: list[dict], language: str) -> list[dict]:
+    cleaned_words = []
+    for word in words:
+        try:
+            text = _clean_caption_word(word.get("word", ""))
+            start = float(word.get("start", 0))
+            end = float(word.get("end", start))
+        except (TypeError, ValueError):
+            continue
+        if text:
+            cleaned_words.append({"word": text, "start": start, "end": end})
+
+    if not cleaned_words:
+        return []
+
+    language_code = normalize_video_language(language)
+    max_words = 8 if language_code == "ar" else 10
+    max_chars = 46 if language_code == "ar" else 58
+    min_words_before_soft_break = 3 if language_code == "ar" else 4
+    raw_cues: list[dict] = []
+    cue_words: list[dict] = []
+    cue_start = cleaned_words[0]["start"]
+
+    for i, word in enumerate(cleaned_words):
+        next_word = cleaned_words[i + 1] if i + 1 < len(cleaned_words) else None
+        if not cue_words:
+            cue_start = word["start"]
+        cue_words.append(word)
+
+        text = _caption_text_from_words(cue_words)
+        enough_for_soft_break = len(cue_words) >= min_words_before_soft_break
+        ends_sentence = bool(re.search(r"[.!?\u061f\u2026]$", word["word"]))
+        ends_phrase = bool(re.search(r"[,;:\u060c\u061b]$", word["word"]))
+        next_gap = max(0.0, next_word["start"] - word["end"]) if next_word else 0.0
+        should_break = (
+            i == len(cleaned_words) - 1
+            or (ends_sentence and enough_for_soft_break)
+            or next_gap >= 0.45
+            or len(cue_words) >= max_words
+            or len(text) >= max_chars
+            or (ends_phrase and len(cue_words) >= 5)
+        )
+
+        if should_break:
+            raw_cues.append({
+                "text": text,
+                "start": cue_start,
+                "end": max(word["end"], cue_start + 0.25),
+            })
+            cue_words = []
+
+    cues = []
+    for index, cue in enumerate(raw_cues):
+        next_cue = raw_cues[index + 1] if index + 1 < len(raw_cues) else None
+        min_end = cue["start"] + 1.05
+        padded_end = cue["end"] + 0.45
+        if next_cue:
+            next_limit = next_cue["start"] - 0.04
+            end = max(cue["end"], min(next_limit, max(min_end, padded_end)))
+        else:
+            end = max(min_end, padded_end)
+        cues.append({**cue, "end": end})
+    return cues
+
+
+def _subtitle_cues_from_script(script: str, duration_seconds: float, language: str) -> list[dict]:
+    words = re.sub(r"\s+", " ", script or "").strip().split()
+    if not words:
+        return []
+    duration = max(1.0, float(duration_seconds or 1.0))
+    synthetic_words = [
+        {
+            "word": word,
+            "start": (index / len(words)) * duration,
+            "end": ((index + 1) / len(words)) * duration,
+        }
+        for index, word in enumerate(words)
+    ]
+    return _subtitle_cues_from_words(synthetic_words, language)
+
+
+def _full_video_subtitle_cues(
+    slide_configs: list[dict],
+    slide_audio_data: list[dict],
+    language: str,
+) -> list[dict]:
+    full_cues: list[dict] = []
+    offset = 0.0
+    for config, audio_data in zip(slide_configs, slide_audio_data):
+        duration = float(audio_data.get("audioDurationSeconds") or 0)
+        words = audio_data.get("words") or []
+        cues = (
+            _subtitle_cues_from_words(words, language)
+            if words
+            else _subtitle_cues_from_script(config.get("script", ""), duration, language)
+        )
+        for cue in cues:
+            full_cues.append({
+                "text": cue["text"],
+                "start": cue["start"] + offset,
+                "end": cue["end"] + offset,
+            })
+        offset += math.ceil(duration * 30) / 30
+    return full_cues
+
+
+def _translate_subtitle_cues(
+    cues: list[dict],
+    target_language: str,
+    source_language: str,
+) -> list[dict]:
+    target_code = normalize_video_language(target_language)
+    source_code = normalize_video_language(source_language)
+    if not cues or target_code == source_code:
+        return [dict(cue) for cue in cues]
+
+    translated_texts: list[str] = []
+    batch_size = 10
+    for start in range(0, len(cues), batch_size):
+        batch = cues[start:start + batch_size]
+        batch_texts = [cue["text"] for cue in batch]
+        translated_texts.extend(
+            _translate_subtitle_batch(batch_texts, target_code, source_code)
+        )
+
+    if len(translated_texts) != len(cues):
+        print(f"[translate_subtitle_cues] length mismatch for {target_code}; keeping source")
+        return [dict(cue) for cue in cues]
+
+    if _looks_untranslated([cue["text"] for cue in cues], translated_texts, target_code):
+        print(f"[translate_subtitle_cues] detected untranslated {target_code} batch; retrying one by one")
+        translated_texts = [
+            _translate_single_subtitle(cue["text"], target_code, source_code)
+            for cue in cues
+        ]
+
+    return [
+        {**cue, "text": _clean_caption_word(translated_texts[index]) or cue["text"]}
+        for index, cue in enumerate(cues)
+    ]
+
+
+def _translate_subtitle_batch(
+    texts: list[str],
+    target_language: str,
+    source_language: str,
+) -> list[str]:
+    prompt = f"""Translate these subtitle cues from {video_language_name(source_language)} to {video_language_name(target_language)}.
+
+Return ONLY this JSON shape:
+{{"items":["translated cue 1","translated cue 2"]}}
+
+Rules:
+- The "items" array must contain exactly {len(texts)} strings.
+- Keep each cue short and natural for subtitles.
+- Preserve the meaning and order.
+- Do not copy the source language unless the item is a proper noun or technical term.
+- No markdown, no numbering, no explanations.
+
+Source cues:
+{json.dumps(texts, ensure_ascii=False)}"""
+
+    try:
+        raw = groq_chat(prompt, temperature=0.1, max_tokens=max(900, len(texts) * 120))
+        parsed = _parse_translation_response(raw)
+        if len(parsed) != len(texts):
+            raise ValueError(f"expected {len(texts)} translations, got {len(parsed)}")
+        if _looks_untranslated(texts, parsed, target_language):
+            raise ValueError("batch appears untranslated")
+        return parsed
+    except Exception as e:
+        print(f"[translate_subtitle_batch] retrying individually for {target_language}: {e}")
+        return [
+            _translate_single_subtitle(text, target_language, source_language)
+            for text in texts
+        ]
+
+
+def _parse_translation_response(raw: str) -> list[str]:
+    cleaned = clean_json_response(raw)
+    try:
+        parsed = json.loads(cleaned)
+        if isinstance(parsed, list):
+            return [_clean_caption_word(item) for item in parsed]
+        if isinstance(parsed, dict) and isinstance(parsed.get("items"), list):
+            return [_clean_caption_word(item) for item in parsed["items"]]
+    except Exception:
+        pass
+
+    lines = []
+    for line in cleaned.splitlines():
+        item = re.sub(r"^\s*(?:[-*]|\d+[.)])\s*", "", line).strip().strip('"')
+        if item:
+            lines.append(_clean_caption_word(item))
+    return lines
+
+
+def _translate_single_subtitle(text: str, target_language: str, source_language: str) -> str:
+    prompt = (
+        f"Translate this subtitle from {video_language_name(source_language)} "
+        f"to {video_language_name(target_language)}. Return only the translated subtitle, "
+        f"with no quotes and no explanation:\n{text}"
+    )
+    try:
+        translated = _clean_caption_word(groq_chat(prompt, temperature=0.1, max_tokens=180))
+        translated = translated.strip().strip('"')
+        if translated and not _looks_untranslated([text], [translated], target_language):
+            return translated
+    except Exception as e:
+        print(f"[translate_single_subtitle] keeping source for {target_language}: {e}")
+    return text
+
+
+def _looks_untranslated(source_texts: list[str], translated_texts: list[str], target_language: str) -> bool:
+    if not source_texts or not translated_texts:
+        return True
+
+    normalized_source = [_clean_caption_word(text).lower() for text in source_texts]
+    normalized_translated = [_clean_caption_word(text).lower() for text in translated_texts]
+    identical = sum(
+        1 for source, translated in zip(normalized_source, normalized_translated)
+        if source and source == translated
+    )
+
+    if identical >= max(1, int(len(source_texts) * 0.6)):
+        return True
+
+    combined = " ".join(translated_texts)
+    if target_language == "ar":
+        return not bool(re.search(r"[\u0600-\u06ff]", combined))
+
+    if target_language == "en":
+        french_markers = re.findall(
+            r"\b(le|la|les|un|une|des|et|est|en|de|du|pour|avec|sur|dans|qui|que|ce|cette|ces|nous|vous|ils|elles)\b",
+            combined.lower(),
+        )
+        return len(french_markers) >= max(4, len(translated_texts) // 3)
+
+    return False
+
+
+def _format_vtt_timestamp(seconds: float) -> str:
+    total_ms = max(0, int(round(seconds * 1000)))
+    hours, remainder = divmod(total_ms, 3_600_000)
+    minutes, remainder = divmod(remainder, 60_000)
+    secs, millis = divmod(remainder, 1000)
+    return f"{hours:02}:{minutes:02}:{secs:02}.{millis:03}"
+
+
+def _write_vtt_file(path: str, cues: list[dict], language: str) -> None:
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    language_code = normalize_video_language(language)
+    lines = ["WEBVTT", ""]
+
+    for index, cue in enumerate(cues, start=1):
+        text = _clean_caption_word(cue.get("text", ""))
+        if not text:
+            continue
+        if language_code == "ar":
+            text = f"\u202b{text}\u202c"
+        start = float(cue.get("start", 0))
+        end = max(start + 0.25, float(cue.get("end", start + 0.25)))
+        lines.extend([
+            str(index),
+            f"{_format_vtt_timestamp(start)} --> {_format_vtt_timestamp(end)} line:86% position:50% align:center size:86%",
+            escape(text, quote=False),
+            "",
+        ])
+
+    with open(path, "w", encoding="utf-8") as f:
+        f.write("\n".join(lines))
+
+
+def _subtitle_paths_for_video(video_path: str) -> dict[str, str]:
+    base, _ = os.path.splitext(video_path)
+    return {
+        "subtitleEnPath": f"{base}.en.vtt",
+        "subtitleFrPath": f"{base}.fr.vtt",
+        "subtitleArPath": f"{base}.ar.vtt",
+    }
+
+
+def _recap_response(video_path: str) -> dict[str, str]:
+    response = {"recapVideoPath": video_path}
+    for key, subtitle_path in _subtitle_paths_for_video(video_path).items():
+        if os.path.exists(subtitle_path):
+            response[key] = subtitle_path
+    return response
+
+
+def _write_subtitle_tracks(video_path: str, source_cues: list[dict], source_language: str) -> dict[str, str]:
+    paths = _subtitle_paths_for_video(video_path)
+    for language_code, key in (("en", "subtitleEnPath"), ("fr", "subtitleFrPath"), ("ar", "subtitleArPath")):
+        translated_cues = _translate_subtitle_cues(source_cues, language_code, source_language)
+        _write_vtt_file(paths[key], translated_cues, language_code)
+    return paths
+
+
 # â”€â”€â”€ Recap Video Generation â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 def generate_recap_video(
     lesson_number: int,
@@ -527,10 +836,10 @@ def generate_recap_video(
     estimated_read_time: int,
     course_title: str,
     language: str,
-) -> str | None:
+) -> dict[str, str] | None:
     """
-    Render a narrated MP4 recap video with stable subtitle cues.
-    Returns the absolute path to the saved file, or None on failure.
+    Render a narrated MP4 recap video and WebVTT subtitle tracks.
+    Returns paths to the video and subtitle files, or None on failure.
     """
     print(f"[generate_recap_video] called for lesson {lesson_number}: '{lesson_title}'")
     try:
@@ -715,6 +1024,7 @@ def generate_recap_video(
                     "accentColor":         slide_configs[i]["accentColor"],
                     "script":              slide_configs[i]["script"],
                     "words":               slide_audio_data[i]["words"],
+                    "showSubtitles":       False,
                     "audioDurationSeconds": slide_audio_data[i]["audioDurationSeconds"],
                     "audioFilePath":       slide_audio_data[i]["audioFilePath"],
                 }
@@ -755,6 +1065,8 @@ def generate_recap_video(
             return None
 
         print(result.stdout)
+        source_cues = _full_video_subtitle_cues(slide_configs, slide_audio_data, language_code)
+        _write_subtitle_tracks(out, source_cues, language_code)
 
         # â”€â”€ Cleanup â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         try:
@@ -768,7 +1080,7 @@ def generate_recap_video(
                 pass
 
         print(f"[generate_recap_video] done â€” {os.path.getsize(out):,} bytes")
-        return out
+        return _recap_response(out)
 
     except Exception as exc:
         print(f"[generate_recap_video] ERROR: {exc}")
@@ -1054,10 +1366,10 @@ async def generate_lesson_recap_endpoint(request: GenerateLessonRecapRequest):
     # Return cached file if it already exists
     if os.path.exists(expected_path):
         print(f"[generate-lesson-recap] cache hit: {expected_path}")
-        return {"recapVideoPath": expected_path}
+        return _recap_response(expected_path)
     # Generate
     try:
-        path = generate_recap_video(
+        result = generate_recap_video(
             lesson_number      = request.lessonNumber,
             lesson_title       = request.lessonTitle,
             flashcard_terms    = request.flashcardTerms,
@@ -1066,7 +1378,7 @@ async def generate_lesson_recap_endpoint(request: GenerateLessonRecapRequest):
             course_title       = request.courseTitle,
             language           = language_code,
         )
-        return {"recapVideoPath": path}
+        return result or {"recapVideoPath": ""}
     except HTTPException:
         raise
     except Exception as e:

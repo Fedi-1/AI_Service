@@ -328,11 +328,13 @@ export const CinematicStage: React.FC<{
         label={repairText(sceneLabel)}
         accentColor={slide.accentColor}
       />
-      <NarrationCaption
-        text={repairText(currentSubtitle(subtitleCues, currentTimeSeconds))}
-        accentColor={slide.accentColor}
-        language={videoLanguage}
-      />
+      {slide.showSubtitles === false ? null : (
+        <NarrationCaption
+          text={repairText(currentSubtitle(subtitleCues, currentTimeSeconds))}
+          accentColor={slide.accentColor}
+          language={videoLanguage}
+        />
+      )}
       <div
         style={{
           position: "absolute",

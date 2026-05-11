@@ -18,6 +18,7 @@ export interface SlideData {
   script: string;
   words: WordTimestamp[];
   subtitles?: SubtitleCue[];
+  showSubtitles?: boolean;
   audioDurationSeconds: number;
   audioFilePath: string;
 }
