@@ -1090,8 +1090,18 @@ def generate_recap_video(
 
 
 # â”€â”€â”€ On-demand Quiz Generation â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-def generate_quiz_questions(lesson_content: str, previous_questions: list[str] = []) -> list:
-    """Generate exactly 5 fresh quiz questions from lesson content using high-temperature sampling."""
+def generate_quiz_questions(
+    lesson_content: str,
+    previous_questions: list[str] = [],
+    question_count: int = 5,
+) -> list:
+    """Generate a quiz question set from lesson content using high-temperature sampling."""
+    question_count = max(1, min(question_count, 30))
+    fill_blank_count = max(1, question_count // 5) if question_count >= 5 else 0
+    remaining_count = question_count - fill_blank_count
+    true_false_count = remaining_count // 2
+    mcq_count = remaining_count - true_false_count
+
     exclusion_block = ""
     if previous_questions:
         formatted = "\n".join(f"  - {q}" for q in previous_questions)
@@ -1102,34 +1112,35 @@ FORBIDDEN QUESTIONS â€” these questions were already used in previous attem
 If you repeat or closely paraphrase any of these, it is a critical failure.
 """
 
-    prompt = f"""You are a quiz generator for an e-learning platform. Your task is to generate exactly 5 quiz questions based on the lesson content provided.
+    prompt = f"""You are a quiz generator for an e-learning platform. Your task is to generate exactly {question_count} quiz questions based on the lesson content provided.
 {exclusion_block}
 CRITICAL INSTRUCTION â€” ANGLE OF APPROACH:
-Every time you are called you must approach the lesson from a completely different angle.
-Do NOT generate questions about the most obvious or prominent concepts â€” instead pick less obvious facts, edge cases, nuances, or relationships between concepts that a student might overlook or take for granted.
+Every question must approach the lesson from a different angle.
+Do NOT repeat the same concept, scenario, wording pattern, or answer across questions.
+Do NOT generate questions only about the most obvious or prominent concepts â€” include less obvious facts, edge cases, nuances, or relationships between concepts that a student might overlook or take for granted.
 Force the student to think deeply, not just recall headline facts.
 
 LANGUAGE RULE: Detect the language of the lesson content and write ALL questions, options, answers, and explanations in that SAME language. If content is in French, respond in French. If in English, respond in English.
 
-Generate EXACTLY 5 questions in this order and distribution:
-- Questions 1â€“2: questionType "TRUE_FALSE", difficulty "EASY"
+Generate EXACTLY {question_count} questions in this order and distribution:
+- First {true_false_count} questions: questionType "TRUE_FALSE", difficulty "EASY"
   * options must be exactly ["Vrai", "Faux"] if content is in French, or ["True", "False"] if in English
   * correctAnswer must be exactly one of the two option values
   * Write ORIGINAL statements in your own words â€” NEVER copy a sentence from the lesson and flip one word
   * Test conceptual understanding, not surface-level recall of wording
-- Questions 3â€“4: questionType "MCQ", difficulty "MEDIUM"
+- Next {mcq_count} questions: questionType "MCQ", difficulty "MEDIUM"
   * Exactly 4 options â€” all plausible, wrong ones are related to the topic and wrong for a specific reason
   * correctAnswer must exactly match one of the 4 options
   * Require reasoning: compare concepts, identify correct use case/context, apply concept to scenario, or identify a consequence/implication
   * NEVER ask a question whose answer is a single isolated fact that can be read directly from one sentence
-- Question 5: questionType "FILL_BLANK", difficulty "HARD"
+- Final {fill_blank_count} questions: questionType "FILL_BLANK", difficulty "HARD"
   * options must be an empty array []
   * question text MUST contain "____" as the blank placeholder
   * correctAnswer is the exact word or short phrase that fills the blank
   * Target a key technical term that requires genuine understanding â€” NOT a term that appears verbatim in an almost identical sentence in the lesson
   * Construct the sentence around the concept, not around a sentence already in the lesson
 
-Return ONLY a valid JSON array of exactly 5 question objects. No markdown, no code fences, no text outside the JSON array.
+Return ONLY a valid JSON array of exactly {question_count} question objects. No markdown, no code fences, no text outside the JSON array.
 
 Each question object must have these fields:
 - "questionType": "TRUE_FALSE" | "MCQ" | "FILL_BLANK"
@@ -1146,7 +1157,7 @@ Lesson content:
         model=MODEL,
         messages=[{"role": "user", "content": prompt}],
         temperature=0.9,
-        max_tokens=4096,
+        max_tokens=8192 if question_count > 5 else 4096,
     )
     raw     = response.choices[0].message.content.strip()
     cleaned = clean_json_response(raw)
@@ -1156,6 +1167,7 @@ Lesson content:
 class GenerateQuizRequest(BaseModel):
     lessonContent: str
     previousQuestions: list[str] = []
+    questionCount: int = 5
 
 
 class GenerateExamRequest(BaseModel):
@@ -1329,17 +1341,48 @@ def health_check():
 
 @app.post("/api/generate-quiz")
 async def generate_quiz(request: GenerateQuizRequest):
-    """Generate 5 fresh quiz questions on demand from lesson content."""
+    """Generate fresh quiz questions on demand from lesson content."""
     if not request.lessonContent or len(request.lessonContent.strip()) < 50:
         raise HTTPException(status_code=400, detail="lessonContent is too short to generate questions.")
     try:
-        questions = generate_quiz_questions(request.lessonContent, request.previousQuestions)
+        questions = generate_quiz_questions(
+            request.lessonContent,
+            request.previousQuestions,
+            request.questionCount,
+        )
     except (json.JSONDecodeError, Exception):
         # Retry once on parse failure
         try:
-            questions = generate_quiz_questions(request.lessonContent, request.previousQuestions)
+            questions = generate_quiz_questions(
+                request.lessonContent,
+                request.previousQuestions,
+                request.questionCount,
+            )
         except Exception as retry_err:
             raise HTTPException(status_code=502, detail=f"Quiz generation failed: {str(retry_err)}")
+    return questions
+
+
+@app.post("/api/generate-quiz-bank")
+async def generate_quiz_bank(request: GenerateQuizRequest):
+    """Generate a full 15-question quiz bank in one call."""
+    if not request.lessonContent or len(request.lessonContent.strip()) < 50:
+        raise HTTPException(status_code=400, detail="lessonContent is too short to generate a quiz bank.")
+    try:
+        questions = generate_quiz_questions(
+            request.lessonContent,
+            request.previousQuestions,
+            15,
+        )
+    except (json.JSONDecodeError, Exception):
+        try:
+            questions = generate_quiz_questions(
+                request.lessonContent,
+                request.previousQuestions,
+                15,
+            )
+        except Exception as retry_err:
+            raise HTTPException(status_code=502, detail=f"Quiz bank generation failed: {str(retry_err)}")
     return questions
 
 
